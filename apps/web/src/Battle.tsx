@@ -455,7 +455,7 @@ export function Battle({
       className={clsx(
         'mx-auto',
         'grid',
-        'max-w-7xl',
+        'max-w-[96rem]',
         'gap-5',
         'px-4',
         'py-5',
@@ -490,50 +490,56 @@ export function Battle({
           </button>
         </div>
 
-        <Timeline
-          state={shown}
-          preview={timelinePreview?.state ?? null}
-          ghostSeq={timelinePreview?.ghostSeq ?? null}
-          viewer={viewer}
-          highlightSeq={hoverSeq}
-          onHoverAction={setHoverSeq}
-        />
-
         <div
-          ref={board}
-          className={clsx('relative', 'mx-auto', 'w-full', 'max-w-4xl')}
+          className={clsx(
+            'grid',
+            'items-start',
+            'gap-4',
+            'lg:grid-cols-[14rem_minmax(0,1fr)]',
+          )}
         >
-          <Stage
+          <Timeline
             state={shown}
+            preview={timelinePreview?.state ?? null}
+            ghostSeq={timelinePreview?.ghostSeq ?? null}
             viewer={viewer}
-            sideNames={[sideName(0), sideName(1)]}
-            youLabel={(side) =>
-              config.mode === 'bot'
-                ? side === 'left'
-                  ? 'Your turn'
-                  : 'Enemy turn'
-                : 'Acting'
-            }
-            activeId={shown.activeId}
-            inspectId={hoverUnit}
-            moveSlots={moveSlots}
-            swapSlots={swapSlots}
-            targetSlots={
-              new Set(
-                [...targets.values()].flatMap((c) =>
-                  c.slots.map((s) => slotKey(c.side, s)),
-                ),
-              )
-            }
-            zoneTone={zoneTone}
-            preview={preview}
-            threats={threats}
-            hurt={hurt}
-            onSlot={onSlot}
-            onHoverSlot={setHoverKey}
-            onHoverUnit={setHoverUnit}
+            highlightSeq={hoverSeq}
+            onHoverAction={setHoverSeq}
           />
-          <Arrows arrows={arrows} positions={positions} />
+
+          <div ref={board} className={clsx('relative', 'w-full')}>
+            <Stage
+              state={shown}
+              viewer={viewer}
+              sideNames={[sideName(0), sideName(1)]}
+              youLabel={(side) =>
+                config.mode === 'bot'
+                  ? side === 'left'
+                    ? 'Your turn'
+                    : 'Enemy turn'
+                  : 'Acting'
+              }
+              activeId={shown.activeId}
+              inspectId={hoverUnit}
+              moveSlots={moveSlots}
+              swapSlots={swapSlots}
+              targetSlots={
+                new Set(
+                  [...targets.values()].flatMap((c) =>
+                    c.slots.map((s) => slotKey(c.side, s)),
+                  ),
+                )
+              }
+              zoneTone={zoneTone}
+              preview={preview}
+              threats={threats}
+              hurt={hurt}
+              onSlot={onSlot}
+              onHoverSlot={setHoverKey}
+              onHoverUnit={setHoverUnit}
+            />
+            <Arrows arrows={arrows} positions={positions} />
+          </div>
         </div>
 
         <TurnPanel

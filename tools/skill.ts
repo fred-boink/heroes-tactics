@@ -123,12 +123,38 @@ function play(a: BotOptions, b: BotOptions, aSide: PlayerId, t: Tracking) {
   return state.winner === aSide ? 1 : 0;
 }
 
-const matchups: [string, BotOptions, string, BotOptions][] = [
-  ['greedy', { noise: 0.3 }, 'random', { style: 'random' }],
-  ['greedy', { noise: 0.3 }, 'never moves', { style: 'static', noise: 0.3 }],
-  ['greedy', { noise: 0.3 }, 'sloppy greedy', { noise: 25 }],
-  ['greedy', { noise: 0.3 }, 'greedy', { noise: 0.3 }],
-];
+const suites: Record<string, [string, BotOptions, string, BotOptions][]> = {
+  basic: [
+    ['greedy', { noise: 0.3 }, 'random', { style: 'random' }],
+    ['greedy', { noise: 0.3 }, 'never moves', { style: 'static', noise: 0.3 }],
+    ['greedy', { noise: 0.3 }, 'sloppy greedy', { noise: 25 }],
+    ['greedy', { noise: 0.3 }, 'greedy', { noise: 0.3 }],
+  ],
+  wider: [
+    [
+      'lookahead 12',
+      { style: 'lookahead', breadth: 12, noise: 0.3 },
+      'lookahead 6',
+      { style: 'lookahead', breadth: 6, noise: 0.3 },
+    ],
+    [
+      'lookahead 3',
+      { style: 'lookahead', breadth: 3, noise: 0.3 },
+      'greedy',
+      { noise: 0.3 },
+    ],
+  ],
+  lookahead: [
+    ['lookahead', { style: 'lookahead', noise: 0.3 }, 'greedy', { noise: 0.3 }],
+    [
+      'lookahead',
+      { style: 'lookahead', noise: 0.3 },
+      'lookahead',
+      { style: 'lookahead', noise: 0.3 },
+    ],
+  ],
+};
+const matchups = suites[process.argv[4] ?? 'basic']!;
 
 const started = Date.now();
 for (const [nameA, a, nameB, b] of matchups) {

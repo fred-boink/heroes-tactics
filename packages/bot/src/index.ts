@@ -27,8 +27,13 @@ export interface BotOptions {
    * - greedy (default): picks the best-scoring plan.
    * - static: greedy, but never repositions.
    * - random: picks uniformly among all legal plans.
+   * - lookahead: takes the best few greedy plans, plays each forward until the
+   *   enemy's next hero has replied with its best greedy answer, and picks the
+   *   plan that holds up best.
    */
-  style?: 'greedy' | 'static' | 'random';
+  style?: 'greedy' | 'static' | 'random' | 'lookahead';
+  /** Lookahead only: how many of the best greedy plans to test. */
+  breadth?: number;
 }
 
 export function chooseActivation(
@@ -42,6 +47,7 @@ export function chooseActivation(
   const noise = options.noise ?? 0.3;
   const style = options.style ?? 'greedy';
   const plans: Command[][] = [];
+  const scored: { score: number; plan: Command[]; after: BattleState }[] = [];
 
   let best: { score: number; plan: Command[] } = {
     score: -Infinity,
@@ -59,6 +65,8 @@ export function chooseActivation(
       s = r.state;
     }
     const score = evaluate(forecast(s), me) + random() * noise;
+    if (style === 'lookahead')
+      scored.push({ score, plan: [...prefix, ...plan], after: s });
     if (score > best.score) best = { score, plan: [...prefix, ...plan] };
   };
 
@@ -114,7 +122,49 @@ export function chooseActivation(
   if (style === 'random' && plans.length) {
     return plans[Math.floor(random() * plans.length)]!;
   }
+  if (style === 'lookahead' && scored.length > 1) {
+    const top = scored
+      .sort((a, b) => b.score - a.score)
+      .slice(0, options.breadth ?? 6);
+    let pick = top[0]!;
+    let pickScore = -Infinity;
+    for (const candidate of top) {
+      const replied = untilEnemyReplies(candidate.after, me);
+      const score = evaluate(forecast(replied), me) + random() * noise;
+      if (score > pickScore) {
+        pickScore = score;
+        pick = candidate;
+      }
+    }
+    return pick.plan;
+  }
   return best.plan;
+}
+
+/**
+ * Plays greedy moves for everyone until the first enemy hero after this one
+ * has acted: the reply this plan has to survive.
+ */
+function untilEnemyReplies(state: BattleState, me: PlayerId): BattleState {
+  let s = state;
+  for (let i = 0; i < 8 && s.winner === null; i++) {
+    const active = activeUnit(s);
+    if (!active) break;
+    const plan = chooseActivation(s, { style: 'greedy', noise: 0 });
+    const before = s;
+    for (const c of plan) {
+      const r = applyCommand(s, c);
+      if (!r.ok) break;
+      s = r.state;
+    }
+    if (s === before) {
+      const r = applyCommand(s, { type: 'wait', unitId: active.id });
+      if (!r.ok) break;
+      s = r.state;
+    }
+    if (active.owner !== me) break;
+  }
+  return s;
 }
 
 /** Lets everyone wait until every action queued so far has landed. */

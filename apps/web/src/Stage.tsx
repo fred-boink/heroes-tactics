@@ -401,7 +401,7 @@ function Token({
           'border-[3px]',
           'border-brass',
           'bg-gradient-to-b',
-          'p-[12%]',
+          'p-2.5',
           'text-vellum',
           'shadow-[0_4px_8px_rgba(0,0,0,0.45)]',
           mine
