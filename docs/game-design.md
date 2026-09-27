@@ -48,9 +48,9 @@ Each side has its own **4×2 formation**: 4 lanes, front row and back row, 8 slo
 ```
 
 - **Melee** hits the enemy front slot straight ahead (a few abilities hit diagonally, or reach into the back row). Melee can only be used from your own front row.
-- **Ranged** attacks come in two kinds:
-  - **Straight shots** (crossbows, Frost Arrow) fire down the attacker's own column and hit the **first hero or stone block in the way**, front row first. A front-liner shields whoever stands behind it.
-  - **Arcing shots** (Arrow, Smoke Bomb) can't be obstructed and reach any slot.
+- **Ranged** attacks have a **shot path**, shown on the ability:
+  - **Direct** (crossbows, Frost Arrow, Throwing Knives): you pick a **lane**, not a slot. The shot hits the **first hero or stone block in that lane**, front row first. A front-liner covers whoever stands behind it, so moving a hero in front of an ally blocks direct shots at them. Scatter Shot is direct down both lanes beside the shooter.
+  - **Lob** (Arrow, Aimed Shot, Twin Arrows, Smoke Bomb): arcs over the front row and hits exactly the slot you pick. Lobs trade damage for that: 1 instead of 2.
 - **Spells** hit **patterns** (below) and can't be obstructed.
 - You arrange your formation before the battle, and heroes can reposition during it.
 
@@ -62,10 +62,11 @@ There are no whole turns. One **timeline** orders everything that will happen, a
 NOW ─► Rg · DK → Reap (front 1) · Kn · Wl → Hellfire (back 2–3) · As ...
 ```
 
-- **Heroes** appear on the timeline when their next activation comes up. After acting, a hero goes back on **its recovery time** later: fast classes 3 ticks, normal 4, tanks 5. **Wait** skips acting and brings the hero back after half its recovery.
+- **Heroes** appear on the timeline when their next activation comes up. After acting, a hero goes back on **its recovery time** later: fast classes 3 ticks, normal 4, tanks 5. **Brace** (waiting) skips acting: the hero takes 1 less damage from each hit until its next turn, which comes after half its recovery.
 - **Every action is queued.** On its activation a hero chooses an ability and a target **slot**. The action goes on the timeline after the ability's **attack speed** in ticks, and resolves when the timeline reaches it. Quick abilities have a speed of 1; big ones 2–3.
-- **Both players see every queued action:** who, which ability, and which slots. That's the telegraph. Aiming at slots, not heroes, is what makes it something you can play around.
-- **Aim is relative to the attacker.** Melee has a fixed shape, such as straight ahead or diagonal; ranged attacks and spells pick a slot at a column offset. If the attacker is moved before its action lands (for example, an ally swaps with it), the action shifts with it. A melee attacker moved to the back row loses its action.
+- **Both players see every queued action:** who, which ability, and which slots. That's the telegraph.
+- **Actions lock onto their targets.** An action hits only the heroes that stood in its slots when it was queued. A target that moves away **dodges** it, and a hero that steps into the slot afterwards is safe. An action aimed at an empty slot locks onto no one and hits whoever is there when it lands, which is how you cover a slot someone might step into.
+- **Aim is relative to the attacker.** Melee has a fixed shape, such as straight ahead or diagonal; ranged attacks and spells pick a slot at a column offset. If the attacker is moved before its action lands (for example, an ally swaps with it), the action shifts with it, and misses if that takes it off its target. A melee attacker moved to the back row loses its action.
 - **Strict order:** nothing happens at the same time. Queued actions resolve before heroes act on the same tick, in the order they were queued, and heroes on the same tick alternate sides. The turn list shows that exact order.
 - **Your action lands before your next turn.** A hero's next turn never comes before its own queued action has landed, whatever hastes or delays do.
 - **Opening:** player 1 moves first; player 2's heroes start one tick later. In simulations this gives the first side about 58–63% of wins instead of 26%, since committing first is otherwise a big disadvantage.
@@ -73,14 +74,15 @@ NOW ─► Rg · DK → Reap (front 1) · Kn · Wl → Hellfire (back 2–3) · 
 ### An activation
 
 1. **Reposition (optional):** step to a neighbouring slot on your side. Stepping onto an ally swaps places with it; the ally keeps its place on the timeline, and its queued action shifts with it. Rooted heroes and heroes standing in frost can't move or be swapped, and stone blocks can't be entered. The step can be changed until the hero acts or waits.
-2. **Act:** choose an ability and target, which queues it. Or **Wait**.
+2. **Act:** choose an ability and target, which queues it. Or **Brace**.
 
 ### Answering a telegraph
 
 Before a queued action lands, the defender can:
 
-- **Step out** of the targeted slot or pattern.
-- **Block:** a spell or attack lands on whoever stands in the slot when it resolves, so a tank can step into a threatened slot. A filled front row keeps melee off the back row.
+- **Step out** of the targeted slot or pattern: the action is locked onto the hero, so it misses.
+- **Block:** step a hero in front of a back-row target, in its lane, and a **direct shot** at the target hits the blocker instead. Bodyguard swaps in to take single-target hits for a neighbour. A filled front row keeps melee off the back row.
+- **Brace:** a hero that can't get away can wait and take 1 less damage from each hit.
 - **Interrupt:** knock out the attacker, turn it to 🪨 stone or put it in 🌫️ smoke, and its queued action is cancelled.
 - **Delay:** ❄️ ice pushes the attacker's next turn back on the timeline, buying time before its next action.
 
@@ -103,14 +105,14 @@ Offensive patterns are placed on the enemy formation around a chosen slot:
 
 The shape of an ability decides its baseline, so players learn a few rules instead of every stat line:
 
-| Shape                           | Hits                                  | Base damage | Speed |
-| ------------------------------- | ------------------------------------- | ----------- | ----- |
-| Melee                           | The enemy front slot in reach         | 2           | 1     |
-| Straight shot                   | The first hero or block down the lane | 2           | 1     |
-| Lob                             | Any slot, over the front row          | 1           | 1     |
-| Back-row reach (Backstab, Hook) | A back slot ahead                     | 1           | 2     |
-| Two slots (pair or column)      | 2 slots                               | 1 each      | 2     |
-| Big area (row or 2×2)           | 3–4 slots                             | 1 each      | 3     |
+| Shape                           | Hits                                | Base damage | Speed |
+| ------------------------------- | ----------------------------------- | ----------- | ----- |
+| Melee                           | The enemy front slot in reach       | 2           | 1     |
+| Direct shot                     | The first hero or block in any lane | 2           | 1     |
+| Lob                             | Any slot, over the front row        | 1           | 1     |
+| Back-row reach (Backstab, Hook) | A back slot ahead                   | 1           | 2     |
+| Two slots (pair or column)      | 2 slots                             | 1 each      | 2     |
+| Big area (row or 2×2)           | 3–4 slots                           | 1 each      | 3     |
 
 - **An effect costs 1 damage:** push, pull, shove, burn, chill, mark, weaken, root, interrupt or delay.
 - **One more tick buys 1 more damage:** Heavy Bolt is a straight shot for 3 at speed 2; Maul is melee for 3 at speed 2.
@@ -154,7 +156,7 @@ Slots can carry statuses too. Each lasts a set number of its placer's turns, sho
 - **Empower** (Inspire, Dark Pact): the ally's next hit does 1 more. **Quicken** (Rally): an ally's queued action lands sooner. **Mend** heals an ally. Haste and Wild Growth can target any ally.
 - **Your own side too:** abilities that only move people (Gust, Twist) can be aimed at either side, alongside Intervene and Relocate. Because aim is relative to the caster, moving your own caster moves its queued spell: queue a spell, then swap or shove the caster to re-aim it once the enemy has committed. Damaging pushes stay enemy-only.
 - **Sideways and swaps:** Trip, Uproot and Gust shove a hero one lane sideways, away from the attacker; Twist makes two enemies trade places; Intervene swaps the user with any ally; Relocate moves an ally to the other row of its lane.
-- **Two-slot attacks** (Cleave, Scatter Shot, Twin Arrows, Sweep, Thunder) hit a pair or a column, but are slower or weaker than single-target ones.
+- **Two-slot attacks** (Cleave, Scatter Shot, Twin Arrows, Sweep, Thunder) hit a pair or a column, but are slower or weaker than single-target ones. Scatter Shot fans out into the lanes on either side of the shooter and skips the one straight ahead, so moving the shooter changes what it hits. Because it can't pick its lanes, it lands in 1 tick.
 
 - **Bodyguard:** until its next turn, the hero steps into the slot of a neighbour about to be hit by a single-slot attack, and takes the hit instead.
 - **Taunt:** single-slot attacks on the hero's neighbours hit it instead, without moving anyone.
@@ -333,7 +335,7 @@ Crossbowman (light, 3 HP, every 4); Assassin (dark, 3 HP, every 4); Ranger (natu
 | Primary   | Aimed Shot      | Crossbowman  | 1     | Any enemy slot · 1 damage                                                    | Faster (−1 tick)   | +1 damage           |
 | Primary   | Arrow           | Ranger       | 1     | Any enemy slot · 1 damage                                                    | +1 damage          | Also shields itself |
 | Primary   | Quick Shot      | Ranger       | 1     | Straight shot down its column · 1 damage · its next turn 1 sooner            | Next turn 2 sooner | +1 damage           |
-| Primary   | Scatter Shot    | Crossbowman  | 2     | Any enemy slot and the slot to its right · 1 damage                          | Marks what it hits | Also shields itself |
+| Primary   | Scatter Shot    | Crossbowman  | 1     | Direct shot down both lanes beside its own · 1 damage                        | Marks what it hits | Also shields itself |
 | Primary   | Twin Arrows     | Ranger       | 2     | Any enemy slot, whole column · 1 damage                                      | Faster (−1 tick)   | +1 damage           |
 | Primary   | Throwing Knives | Assassin     | 1     | Straight shot down its column · 2 damage                                     | +1 damage          | Marks               |
 | Primary   | Poison Dart     | Assassin     | 1     | Any enemy slot · burn (1 damage on its next 2 turns)                         | +1 damage          | Also weakens        |
@@ -364,7 +366,7 @@ Stormcaller (light, 2 HP, every 4); Warlock (dark, 2 HP, every 4); Druid (nature
 | Secondary | Thunder         | Stormcaller  | 2     | Any enemy slot, whole column · 1 damage                                                                                 | +1 damage        | Chills              |
 | Secondary | Aegis           | Stormcaller  | 1     | An adjacent ally · shield (blocks the next hit)                                                                         | Faster (−1 tick) | Leaves a barrier    |
 | Secondary | Haste           | Stormcaller  | 1     | Any ally · next turn 2 sooner                                                                                           | 3 ticks sooner   | Also shields itself |
-| Secondary | Hellfire        | Warlock      | 3     | Any enemy slot, 2×2 square · 1 damage · leaves fire (1 damage to whoever stands or steps there)                         | Faster (−1 tick) | +1 damage           |
+| Secondary | Hellfire        | Warlock      | 3     | Any enemy slot, 2×2 square · leaves fire (1 damage to whoever stands or steps there)                                    | +1 damage        | Faster (−1 tick)    |
 | Secondary | Ignite          | Warlock      | 2     | Any enemy slot and the slot to its right · leaves fire (1 damage to whoever stands or steps there)                      | Faster (−1 tick) | Also shields itself |
 | Secondary | Disrupt         | Warlock      | 1     | Any enemy slot · delays its queued actions by 3                                                                         | Faster (−1 tick) | 4 ticks             |
 | Secondary | Petrify         | Druid        | 3     | Any enemy slot · stun (skips its next turn, cancels its queued action)                                                  | Faster (−1 tick) | Also shields itself |

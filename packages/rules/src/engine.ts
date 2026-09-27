@@ -65,7 +65,10 @@ export function unitAbility(
 }
 
 /** A new battle, advanced to the first hero's activation. Fast heroes go first. */
-export function createBattle(units: UnitSetup[]): BattleState {
+export function createBattle(
+  units: UnitSetup[],
+  { levelPoints = upgradePoints }: { levelPoints?: number } = {},
+): BattleState {
   const seen = new Set<string>();
   for (const u of units) {
     const k = `${u.owner}:${u.pos.col}:${u.pos.row}`;
@@ -81,7 +84,7 @@ export function createBattle(units: UnitSetup[]): BattleState {
         owner: u.owner,
         classId: u.classId,
         loadout,
-        levels: validLevels(u, loadout),
+        levels: validLevels(u, loadout, levelPoints),
         hp: heroClass(u.classId).maxHp,
         pos: { ...u.pos },
         // Player 1 moves first; player 2's heroes start a tick later, so the
@@ -96,6 +99,7 @@ export function createBattle(units: UnitSetup[]): BattleState {
         rooted: false,
         taunting: false,
         guarding: false,
+        braced: false,
         weak: false,
         empowered: false,
         marked: false,
@@ -136,7 +140,11 @@ function validLoadout(u: UnitSetup): string[] {
   return [...primaries, ...secondaries];
 }
 
-function validLevels(u: UnitSetup, loadout: string[]): Record<string, number> {
+function validLevels(
+  u: UnitSetup,
+  loadout: string[],
+  points: number,
+): Record<string, number> {
   const levels = u.levels ?? {};
   let spent = 0;
   for (const [abilityId, level] of Object.entries(levels)) {
@@ -148,10 +156,8 @@ function validLevels(u: UnitSetup, loadout: string[]): Record<string, number> {
     }
     spent += level;
   }
-  if (spent > upgradePoints) {
-    throw new Error(
-      `${u.id} spends ${spent} upgrade points of ${upgradePoints}`,
-    );
+  if (spent > points) {
+    throw new Error(`${u.id} spends ${spent} level points of ${points}`);
   }
   return { ...levels };
 }
@@ -338,7 +344,12 @@ export function aimOptions(
       }
       break;
     case 'straight':
-      add(0, FRONT);
+      // Pick a lane; the shot hits whoever is first in it.
+      for (let c = 0; c < COLUMNS; c++) add(c - col, FRONT);
+      break;
+    case 'flanks':
+      // Down the lanes on either side of the user's own.
+      aims.push({ dc: 0, row: FRONT });
       break;
     case 'backline':
       if (front) for (const dc of [-1, 0, 1]) add(dc, BACK);
@@ -408,6 +419,10 @@ export function patternSlots(user: Unit, a: AbilityDef, aim: Aim): Slot[] {
       { col: c, row: r },
       { col: c + 1, row: r },
     ],
+    sides: [
+      { col: c - 1, row: r },
+      { col: c + 1, row: r },
+    ],
     column: [
       { col: c, row: FRONT },
       { col: c, row: BACK },
@@ -430,8 +445,8 @@ export function patternSlots(user: Unit, a: AbilityDef, aim: Aim): Slot[] {
 }
 
 /**
- * The slots an ability actually hits now: its pattern, except that straight
- * shots stop at the first hero or stone block in the user's column.
+ * The slots an ability actually hits now: its pattern, except that direct
+ * shots stop at the first hero or stone block in each lane they cross.
  */
 export function targetSlots(
   state: Pick<BattleState, 'units' | 'blocks'>,
@@ -439,15 +454,17 @@ export function targetSlots(
   a: AbilityDef,
   aim: Aim,
 ): Slot[] {
-  if (a.reach !== 'straight') return patternSlots(user, a, aim);
-  if (!user.pos) return [];
+  const cells = patternSlots(user, a, aim);
+  if (a.path !== 'direct') return cells;
   const side = targetSide(user, a, aim);
-  const col = user.pos.col;
-  for (const row of [FRONT, BACK] as const) {
-    const slot = { col, row };
-    if (unitAt(state, side, slot) || blockAt(state, side, slot)) return [slot];
-  }
-  return [{ col, row: BACK }];
+  const lanes = [...new Set(cells.map((s) => s.col))];
+  return lanes.map((col) => {
+    for (const row of [FRONT, BACK] as const) {
+      const slot = { col, row };
+      if (unitAt(state, side, slot) || blockAt(state, side, slot)) return slot;
+    }
+    return { col, row: BACK };
+  });
 }
 
 /** Where a queued action would land right now, and on which side. */
@@ -587,6 +604,7 @@ function run(
 
   if (command.type === 'wait') {
     events.push({ type: 'waited', unitId: unit.id });
+    unit.braced = true;
     endActivation(state, unit, Math.ceil(recovery / 2), events);
     return null;
   }
@@ -623,7 +641,13 @@ function queueAction(
     row: aim.row,
     ...(aim.own ? { own: true } : {}),
     at: state.time + a.speed,
+    targets: [],
   };
+  const side = targetSide(unit, a, action);
+  for (const slot of targetSlots(state, unit, a, action)) {
+    const there = unitAt(state, side, slot);
+    if (there) action.targets.push(there.id);
+  }
   state.queue.push(action);
   events.push({ type: 'queued', action });
   return null;
@@ -671,6 +695,7 @@ function advance(state: BattleState, events: BattleEvent[]) {
     state.activations++;
     hero.taunting = false;
     hero.guarding = false;
+    hero.braced = false;
     for (const g of state.grounds) if (g.placerId === hero.id) g.turns--;
     state.grounds = state.grounds.filter((g) => g.turns > 0);
     const underfoot = hero.pos && groundAt(state, hero.owner, hero.pos);
@@ -770,8 +795,45 @@ function land(state: BattleState, action: QueuedAction, events: BattleEvent[]) {
     return;
   }
 
+  const locked = action.targets?.length ? new Set(action.targets) : null;
+  if (locked) {
+    for (const id of locked) {
+      const u = state.units.find((x) => x.id === id);
+      if (!u?.pos || u.owner !== side) continue;
+      const inside = cells.some((c) => sameSlot(c, u.pos!));
+      const shielded =
+        a.path === 'direct' &&
+        cells.some((c) => c.col === u.pos!.col && c.row === FRONT);
+      if (!inside && !shielded) {
+        events.push({ type: 'dodged', seq: action.seq, unitId: id });
+      }
+    }
+  }
   for (const slot of cells) {
     let target = unitAt(state, side, slot);
+    if (target && locked && !locked.has(target.id)) {
+      // A direct shot still stops at a hero standing in front of its target.
+      const behind =
+        a.path === 'direct'
+          ? state.units.find(
+              (u) =>
+                locked.has(u.id) &&
+                u.owner === side &&
+                u.pos?.col === slot.col &&
+                u.pos.row === BACK &&
+                slot.row === FRONT,
+            )
+          : undefined;
+      if (behind) {
+        events.push({
+          type: 'bodyBlocked',
+          unitId: target.id,
+          protectedId: behind.id,
+        });
+      } else {
+        target = undefined;
+      }
+    }
     if (target && side !== user.owner && a.pattern === 'single') {
       const guard = protector(state, target, 'guarding');
       if (guard?.pos && target.pos) {
@@ -969,6 +1031,7 @@ function hit(
     if (unit.pos && groundAt(state, unit.owner, unit.pos)?.kind === 'barrier') {
       amount = Math.max(0, amount - 1);
     }
+    if (unit.braced) amount = Math.max(0, amount - 1);
     if (amount > 0) {
       dealDamage(state, unit, amount, events);
       dealt = amount;
@@ -1203,7 +1266,7 @@ export function previewAction(
   state: BattleState,
   unitId: string,
   abilityId: string,
-  aim: Aim,
+  aim: Aim & { targets?: string[] },
 ): { state: BattleState; events: BattleEvent[] } {
   const s = structuredClone(state);
   const user = s.units.find((u) => u.id === unitId);
@@ -1220,6 +1283,7 @@ export function previewAction(
         row: aim.row,
         ...(aim.own ? { own: true } : {}),
         at: s.time,
+        targets: aim.targets ?? [],
       },
       events,
     );
@@ -1248,9 +1312,13 @@ export function abilityText(a: AbilityDef): string {
   const where: Record<AbilityDef['reach'], string> = {
     meleeFront: 'Melee, straight ahead',
     meleeDiagonal: 'Melee, diagonally ahead',
-    straight: 'Straight shot down its column',
+    straight: 'Direct shot down any lane (hits the first hero in it)',
+    flanks: 'Direct shot down both lanes beside its own',
     backline: 'Melee into the back row ahead',
-    any: 'Any enemy slot',
+    any:
+      a.path === 'lob'
+        ? 'Lob over the front row to any enemy slot'
+        : 'Any enemy slot',
     enemyRow: 'A whole enemy row',
     self: 'Self',
     anyAlly: 'Any ally',

@@ -32,6 +32,7 @@ export type Reach =
   | 'meleeFront'
   | 'meleeDiagonal'
   | 'straight'
+  | 'flanks'
   | 'backline'
   | 'any'
   | 'enemyRow'
@@ -41,7 +42,10 @@ export type Reach =
   | 'ownFront';
 
 /** The shape an ability hits around its aimed slot. */
-export type Pattern = 'single' | 'pair' | 'column' | 'row' | 'square' | 'cross';
+export type Pattern =
+  'single' | 'pair' | 'sides' | 'column' | 'row' | 'square' | 'cross';
+
+export type ShotPath = 'direct' | 'lob';
 
 export type AbilityKind = 'melee' | 'ranged' | 'spell' | 'support';
 
@@ -151,6 +155,12 @@ export interface AbilityDef {
   kind: AbilityKind;
   reach: Reach;
   pattern: Pattern;
+  /**
+   * How a ranged ability flies. A direct shot stops at the first hero or block
+   * in each lane it crosses, so front-liners cover whoever is behind them. A
+   * lob arcs over the front row and hits exactly the slots it is aimed at.
+   */
+  path?: ShotPath;
   /** Ticks from queueing until it lands. */
   speed: number;
   damage: number;
@@ -190,8 +200,14 @@ export interface HeroClass {
 /** Move points per activation: a hero steps one slot a turn. */
 export const MOVE_POINTS = 1;
 
-/** Upgrade points each hero may spend in the prototype. */
-export const upgradePoints = 2;
+/** How far into a match a battle happens, which sets how levelled heroes are. */
+export type Stage = 'early' | 'mid' | 'late';
+
+/** Level points each hero may spend, by stage: none, half, or every ability maxed. */
+export const stagePoints: Record<Stage, number> = { early: 0, mid: 2, late: 4 };
+
+/** Level points each hero may spend when a battle doesn't say otherwise. */
+export const upgradePoints = stagePoints.mid;
 
 export interface Unit {
   id: string;
@@ -220,6 +236,8 @@ export interface Unit {
   taunting: boolean;
   /** Stepping in front of neighbours about to be hit, until its next activation. */
   guarding: boolean;
+  /** Waited to brace: takes 1 less damage from each hit until its next activation. */
+  braced: boolean;
   /** Its next damaging action does 1 less damage. */
   weak: boolean;
   /** Its next damaging action does 1 more damage. */
@@ -249,6 +267,12 @@ export interface QueuedAction {
   own?: boolean;
   /** The tick it lands on. */
   at: number;
+  /**
+   * The heroes in its slots when it was queued. It hits only them, so a hero
+   * that moves away dodges it and whoever steps in is safe. Aimed at empty
+   * slots, it locks onto no one and hits whoever is there when it lands.
+   */
+  targets: string[];
 }
 
 export interface BattleState {
@@ -300,6 +324,10 @@ export type BattleEvent =
   | { type: 'waited'; unitId: string }
   | { type: 'landed'; seq: number; abilityId: string; unitId: string }
   | { type: 'missed'; seq: number }
+  /** A locked-on target was no longer where the action landed. */
+  | { type: 'dodged'; seq: number; unitId: string }
+  /** A hero in front of the target in its lane took a direct shot for it. */
+  | { type: 'bodyBlocked'; unitId: string; protectedId: string }
   | { type: 'fizzled'; seq: number }
   | { type: 'damaged'; unitId: string; amount: number; hp: number }
   | { type: 'blockDamaged'; owner: PlayerId; col: number; hp: number }

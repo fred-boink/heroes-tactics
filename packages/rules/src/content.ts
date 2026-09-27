@@ -8,6 +8,7 @@ import type {
   HeroClass,
   Pattern,
   Reach,
+  ShotPath,
   Upgrade,
 } from './types';
 
@@ -198,10 +199,20 @@ const defs: Record<string, Omit<AbilityDef, 'id' | 'role' | 'slot'>> = {
     effect: 'weak',
     upgrades: [up('wide', 'Two slots', 1, { pattern: 'pair' })],
   }),
-  hellfire: ab('Hellfire', 'spell', 'any', 3, 1, {
+  // Half the enemy formation: at level 0 it only sets the area on fire.
+  hellfire: ab('Hellfire', 'spell', 'any', 3, 0, {
     pattern: 'square',
     ground: 'fire',
-    upgrades: [faster(3)],
+    upgrades: [
+      {
+        id: 'power',
+        name: '+1 damage',
+        cost: 1,
+        changes: {},
+        bonus: { damage: 1 },
+      },
+      faster(3),
+    ],
   }),
   ignite: ab('Ignite', 'spell', 'any', 2, 0, {
     ground: 'fire',
@@ -311,9 +322,9 @@ const defs: Record<string, Omit<AbilityDef, 'id' | 'role' | 'slot'>> = {
     ticks: 1,
     upgrades: [up('more', '2 ticks sooner', 1, { ticks: 2 })],
   }),
-  // Two slots anywhere, so it never gets faster: levels mark and shield.
-  scatterShot: ab('Scatter Shot', 'ranged', 'any', 2, 1, {
-    pattern: 'pair',
+  // Fans out past the lane ahead: move the shooter to change what it hits.
+  scatterShot: ab('Scatter Shot', 'ranged', 'flanks', 1, 1, {
+    pattern: 'sides',
     upgrades: [
       up('mark', 'Marks what it hits', 1, { effect: 'marked' }),
       up('aegis', 'Also shields itself', 1, { shieldSelf: true }),
@@ -560,6 +571,15 @@ function secondLevel(d: Omit<AbilityDef, 'id' | 'role' | 'slot'>): Upgrade {
   return up('aegis', 'Also shields itself', 1, { shieldSelf: true });
 }
 
+/** Ranged abilities down a lane are direct shots; the rest are lobs. */
+function shotPath(d: Pick<AbilityDef, 'kind' | 'reach'>): {
+  path?: ShotPath;
+} {
+  if (d.kind !== 'ranged') return {};
+  if (d.reach === 'straight' || d.reach === 'flanks') return { path: 'direct' };
+  return { path: 'lob' };
+}
+
 export const abilities: Record<string, AbilityDef> = Object.fromEntries(
   Object.entries(defs).map(([id, d]) => {
     const owner = Object.values(heroClasses).find(
@@ -587,6 +607,7 @@ export const abilities: Record<string, AbilityDef> = Object.fromEntries(
         ...d,
         role: owner.role,
         slot: owner.primaries.includes(id) ? 'primary' : 'secondary',
+        ...shotPath(d),
         upgrades: levels.map((u) => ({ ...u, cost: 1 })),
       } satisfies AbilityDef,
     ];

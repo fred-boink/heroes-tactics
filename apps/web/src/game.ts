@@ -8,11 +8,13 @@ import {
   type BattleEvent,
   type BattleState,
   type Faction,
+  type Stage,
   type PlayerId,
   type Slot,
   type Status,
   type Unit,
 } from '@tactics/rules';
+import type { BotOptions } from '@tactics/bot';
 
 export type Mode = 'bot' | 'hotseat';
 
@@ -26,8 +28,29 @@ export interface GameConfig {
     Record<string, Record<string, number>>,
     Record<string, Record<string, number>>,
   ];
+  /** How well the bot plays, in bot games. */
+  difficulty: Difficulty;
+  /** Sets how many level points each hero may spend. */
+  stage: Stage;
   seed: number;
 }
+
+export type Difficulty = 'easy' | 'normal' | 'hard' | 'expert';
+
+/**
+ * Bot settings per difficulty. Blunders (a random legal plan) are what really
+ * weaken it: in simulations a bot blundering half its turns wins about 9% against
+ * the hard bot, and 30% of turns about 23%. Expert looks one enemy reply ahead.
+ */
+export const difficulties: Record<
+  Difficulty,
+  { name: string; bot: BotOptions }
+> = {
+  easy: { name: 'Easy', bot: { blunder: 0.5, noise: 0.3 } },
+  normal: { name: 'Normal', bot: { blunder: 0.25, noise: 0.3 } },
+  hard: { name: 'Hard', bot: { noise: 0.3 } },
+  expert: { name: 'Expert', bot: { style: 'lookahead', noise: 0.3 } },
+};
 
 export const factionNames: Record<Faction, string> = {
   light: 'Light',
@@ -80,7 +103,8 @@ export function candidates(
     const anchor = { col: unit.pos.col + aim.dc, row: aim.row };
     const candidate = { aim, side, slots };
     // Clicking the aimed slot, or anything the aim actually hits, chooses it.
-    for (const s of [anchor, ...slots]) {
+    // A sides shot skips the slot it is aimed through, so that one doesn't.
+    for (const s of a.pattern === 'sides' ? slots : [anchor, ...slots]) {
       const k = slotKey(side, s);
       if (!result.has(k)) result.set(k, candidate);
     }
@@ -123,7 +147,10 @@ export function describe(
       };
     }
     case 'waited':
-      return { text: `${cap(name(e.unitId))} waits.`, tone: 'plain' };
+      return {
+        text: `${cap(name(e.unitId))} braces (1 less damage from each hit until its next turn).`,
+        tone: 'plain',
+      };
     case 'landed':
       return {
         text: `${cap(name(e.unitId))}'s ${ability(e.abilityId)} lands.`,
@@ -131,6 +158,13 @@ export function describe(
       };
     case 'missed':
       return { text: 'An attack lands on nothing.', tone: 'plain' };
+    case 'dodged':
+      return { text: `${cap(name(e.unitId))} dodged it.`, tone: 'plain' };
+    case 'bodyBlocked':
+      return {
+        text: `${cap(name(e.unitId))} blocks the shot for ${name(e.protectedId)}.`,
+        tone: 'plain',
+      };
     case 'fizzled':
       return { text: 'A queued action is cancelled.', tone: 'magic' };
     case 'damaged':

@@ -29,14 +29,22 @@ export function isFrontLiner(classId: string) {
 const pick = <T>(xs: T[], random?: () => number) =>
   random ? xs[Math.floor(random() * xs.length)]! : xs[0]!;
 
-/** Random levels within the point budget, for bot and simulator heroes. */
-function randomLevels(loadout: string[], random: () => number) {
+/**
+ * Random levels that spend every point (up to 2 per ability), so random heroes
+ * at the same stage are always equally levelled.
+ */
+export function randomLevels(
+  loadout: string[],
+  random: () => number,
+  points = upgradePoints,
+) {
   const result: Record<string, number> = {};
-  let left = upgradePoints;
-  for (const id of loadout) {
-    const level = Math.min(left, Math.floor(random() * 3));
-    if (level > 0) result[id] = level;
-    left -= level;
+  let left = Math.min(points, 2 * loadout.length);
+  while (left > 0) {
+    const open = loadout.filter((id) => (result[id] ?? 0) < 2);
+    const id = open[Math.floor(random() * open.length)]!;
+    result[id] = (result[id] ?? 0) + 1;
+    left--;
   }
   return result;
 }
@@ -53,6 +61,8 @@ export function factionParty(
     loadouts?: Record<string, string[]>;
     levels?: Record<string, Record<string, number>>;
     random?: () => number;
+    /** Level points random heroes spend; defaults to mid-game. */
+    levelPoints?: number;
   } = {},
 ): UnitSetup[] {
   const front = [1, 2, 0, 3];
@@ -74,7 +84,9 @@ export function factionParty(
     ];
     const levels =
       options.levels?.[c.id] ??
-      (options.random ? randomLevels(loadout, options.random) : {});
+      (options.random
+        ? randomLevels(loadout, options.random, options.levelPoints)
+        : {});
     return {
       id: `${owner}-${c.id}`,
       owner,

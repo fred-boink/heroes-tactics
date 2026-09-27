@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react';
 import clsx from 'clsx';
+import { flushSync } from 'react-dom';
 import { chooseActivation } from '@tactics/bot';
 import {
   abilities,
@@ -17,7 +18,8 @@ import {
   createBattle,
   factionParty,
   heroClass,
-  hitsNothing,
+  stagePoints,
+  timeline,
   inSmoke,
   moveOptions,
   previewAction,
@@ -34,9 +36,12 @@ import { Arrows, type Arrow, type Positions } from './Arrows';
 import { Portrait } from './Portrait';
 import { Stage, type Threat } from './Stage';
 import { Timeline } from './Timeline';
+import { floatersFor, floaterMs, turnsBefore, type Floater } from './effects';
 import {
   candidates,
   describe,
+  difficulties,
+  sideName as sideLabel,
   factionNames,
   outcomesOf,
   kindNames,
@@ -46,6 +51,30 @@ import {
 } from './game';
 
 const botStepMs = 700;
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+const statusNames: Record<Status, string> = {
+  shield: 'a shield',
+  burn: 'burning',
+  chill: 'chilled',
+  stun: 'stunned',
+  root: 'rooted',
+  weak: 'weakened',
+  marked: 'marked',
+  haste: 'hasted',
+  taunt: 'taunting',
+  guard: 'guarding',
+  empower: 'empowered',
+};
+
+/** What a planned action will do, and who can react before it lands. */
+interface Forecast {
+  lines: { text: string; dodge: string | null; foe: boolean }[];
+  ticks: number;
+  /** Heroes whose turn comes before it lands. */
+  before: string[];
+}
 /** Effects that change the timeline, so their preview shows the shift. */
 const queueEffects = new Set(['haste', 'delay', 'chill', 'stun', 'interrupt']);
 
@@ -56,6 +85,7 @@ const queueEffects = new Set(['haste', 'delay', 'chill', 'stun', 'interrupt']);
  */
 function threatsOf(state: BattleState) {
   const threats = new Map<string, Threat>();
+  const order = timeline(state);
   const moves: {
     seq: number;
     side: PlayerId;
@@ -66,6 +96,9 @@ function threatsOf(state: BattleState) {
   for (const q of state.queue) {
     const { events } = previewAction(state, q.unitId, q.abilityId, q);
     const ticks = Math.round((q.at - state.time) * 10) / 10;
+    const lands = order.findIndex(
+      (e) => e.kind === 'action' && e.action.seq === q.seq,
+    );
     for (const [unitId, o] of outcomesOf(events)) {
       const unit = state.units.find((u) => u.id === unitId);
       if (!unit) continue;
@@ -79,7 +112,12 @@ function threatsOf(state: BattleState) {
         effects: [],
         statuses: [],
         moved: false,
+        canDodge: true,
       };
+      const turn = order.findIndex(
+        (e) => e.kind === 'hero' && e.unitId === unitId,
+      );
+      if (turn === -1 || turn > lands) t.canDodge = false;
       t.damage += o.damage;
       t.ticks = Math.min(t.ticks, ticks);
       t.effects.push(abilities[q.abilityId]!.name);
@@ -104,16 +142,19 @@ export function Battle({
   onLeave: () => void;
 }) {
   const [state, setState] = useState<BattleState>(() =>
-    createBattle([
-      ...factionParty(config.factions[0], 0, {
-        loadouts: config.loadouts[0],
-        levels: config.levels[0],
-      }),
-      ...factionParty(config.factions[1], 1, {
-        loadouts: config.loadouts[1],
-        levels: config.levels[1],
-      }),
-    ]),
+    createBattle(
+      [
+        ...factionParty(config.factions[0], 0, {
+          loadouts: config.loadouts[0],
+          levels: config.levels[0],
+        }),
+        ...factionParty(config.factions[1], 1, {
+          loadouts: config.loadouts[1],
+          levels: config.levels[1],
+        }),
+      ],
+      { levelPoints: stagePoints[config.stage] },
+    ),
   );
   const [log, setLog] = useState<BattleEvent[]>([]);
   const [abilityId, setAbilityId] = useState<string | null>(null);
@@ -125,7 +166,7 @@ export function Battle({
   const [hoverUnit, setHoverUnit] = useState<string | null>(null);
   const [hoverSeq, setHoverSeq] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [hurt, setHurt] = useState<Set<string>>(new Set());
+  const [floaters, setFloaters] = useState<Floater[]>([]);
   const botBusy = useRef(false);
 
   const viewer: PlayerId = 0;
@@ -136,14 +177,29 @@ export function Battle({
     (config.mode === 'hotseat' || active.owner === 0),
   );
 
-  const record = useCallback((events: BattleEvent[]) => {
+  const record = useCallback((before: BattleState, events: BattleEvent[]) => {
     setLog((l) => [...l, ...events]);
-    const damaged = new Set(
-      events.flatMap((e) => (e.type === 'damaged' ? [e.unitId] : [])),
+    const fresh = floatersFor(before, events);
+    if (!fresh.length) return;
+    setFloaters((f) => [...f, ...fresh]);
+    const ids = new Set(fresh.map((f) => f.id));
+    const last = Math.max(...fresh.map((f) => f.delay));
+    setTimeout(
+      () => setFloaters((f) => f.filter((x) => !ids.has(x.id))),
+      last + floaterMs + 100,
     );
-    if (damaged.size) {
-      setHurt(damaged);
-      setTimeout(() => setHurt(new Set()), 320);
+  }, []);
+
+  /** Commits a new state, sliding heroes that changed slots. */
+  const commit = useCallback((update: () => void) => {
+    const doc = document as Document & {
+      startViewTransition?: (cb: () => void) => unknown;
+    };
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (doc.startViewTransition && !still) {
+      doc.startViewTransition(() => flushSync(update));
+    } else {
+      update();
     }
   }, []);
 
@@ -167,8 +223,10 @@ export function Battle({
       events.push(...result.events);
     }
     setError(failure);
-    setState(next);
-    record(events);
+    commit(() => {
+      setState(next);
+      record(state, events);
+    });
     reset();
   };
 
@@ -178,7 +236,7 @@ export function Battle({
     const unit = activeUnit(state);
     if (!unit || unit.owner !== 1 || botBusy.current) return;
     botBusy.current = true;
-    const plan = chooseActivation(state, { noise: 0.3 });
+    const plan = chooseActivation(state, difficulties[config.difficulty].bot);
     let current = state;
     let i = 0;
     const stepOnce = () => {
@@ -187,17 +245,20 @@ export function Battle({
         botBusy.current = false;
         return;
       }
+      const before = current;
       const result = applyCommand(current, command);
       if (result.ok) {
         current = result.state;
-        setState(current);
-        record(result.events);
+        commit(() => {
+          setState(result.state);
+          record(before, result.events);
+        });
       }
       if (i < plan.length && result.ok) setTimeout(stepOnce, botStepMs);
       else botBusy.current = false;
     };
     setTimeout(stepOnce, botStepMs);
-  }, [config.mode, state, record]);
+  }, [config.mode, config.difficulty, state, record, commit]);
 
   const moveCommand: Command | null =
     humanTurn &&
@@ -281,6 +342,56 @@ export function Battle({
         : queued;
     return { state, ghostSeq: shown.nextSeq };
   }, [focus, actor, abilityId, shown]);
+
+  // Plain-language forecast of the hovered or chosen target.
+  const forecast = useMemo((): Forecast | null => {
+    if (!focus || !actor || !abilityId) return null;
+    const queued = queuePreview(shown, {
+      type: 'act',
+      unitId: actor.id,
+      abilityId,
+      aim: focus.aim,
+    });
+    if (!queued) return null;
+    const early = turnsBefore(queued, shown.nextSeq);
+    const name = (id: string) => {
+      const u = shown.units.find((x) => x.id === id)!;
+      return `${sideLabel(u.owner, config.mode)} ${heroClass(u.classId).name}`;
+    };
+    const { events } = previewAction(shown, actor.id, abilityId, focus.aim);
+    const lines: Forecast['lines'] = [];
+    for (const [unitId, o] of outcomesOf(events)) {
+      const u = shown.units.find((x) => x.id === unitId);
+      if (!u) continue;
+      const parts: string[] = [];
+      if (o.blocked) parts.push('blocks it with a shield');
+      if (o.knockedOut) parts.push('is knocked out');
+      else if (o.damage > 0)
+        parts.push(
+          `takes ${o.damage} (${u.hp} → ${Math.max(0, u.hp - o.damage)} health)`,
+        );
+      if (o.heal > 0) parts.push(`heals ${o.heal}`);
+      for (const st of o.statuses) parts.push(`gets ${statusNames[st]}`);
+      if (o.moves.length) parts.push('is moved');
+      if (!parts.length) continue;
+      const foe = u.owner !== actor.owner;
+      lines.push({
+        text: `${cap(name(unitId))} ${parts.join(', ')}.`,
+        dodge: foe
+          ? early.has(unitId)
+            ? 'Its turn comes first: it can step out of the way.'
+            : "It can't act before this lands."
+          : null,
+        foe,
+      });
+    }
+    const speed = unitAbility(actor, abilityId).speed;
+    return {
+      lines,
+      ticks: speed,
+      before: [...early].filter((id) => id !== actor.id).map(name),
+    };
+  }, [focus, actor, abilityId, shown, config.mode]);
 
   const { threats, moves: queuedMoves } = useMemo(
     () => threatsOf(shown),
@@ -534,7 +645,7 @@ export function Battle({
               zoneTone={zoneTone}
               preview={preview}
               threats={threats}
-              hurt={hurt}
+              floaters={floaters}
               onSlot={onSlot}
               onHoverSlot={setHoverKey}
               onHoverUnit={setHoverUnit}
@@ -550,6 +661,7 @@ export function Battle({
           stepped={Boolean(moveCommand)}
           abilityId={abilityId}
           chosen={chosen}
+          forecast={forecast}
           error={error}
           onAbility={(id) => {
             setChosen(null);
@@ -587,6 +699,7 @@ function TurnPanel({
   stepped,
   abilityId,
   chosen,
+  forecast,
   error,
   onAbility,
   onResetStep,
@@ -602,6 +715,7 @@ function TurnPanel({
   stepped: boolean;
   abilityId: string | null;
   chosen: Candidate | null;
+  forecast: Forecast | null;
   error: string | null;
   onAbility: (id: string) => void;
   onResetStep: () => void;
@@ -730,10 +844,6 @@ function TurnPanel({
     </li>
   );
   const chosenAbility = abilityId ? unitAbility(unit, abilityId) : null;
-  const empty =
-    chosen && abilityId
-      ? hitsNothing(state, unit.id, abilityId, chosen.aim)
-      : false;
 
   return (
     <section className={clsx(panel, sideTone)} aria-label="Your turn">
@@ -855,10 +965,10 @@ function TurnPanel({
             'hover:border-brass',
           )}
         >
-          <span className={clsx('font-medium')}>Wait</span>
+          <span className={clsx('font-medium')}>Brace</span>
           <span className={clsx('text-xs', 'text-vellum/70')}>
-            Do nothing; act again after {Math.ceil(cls.recovery / 2)} ticks
-            instead of {cls.recovery}.
+            Take 1 less damage from each hit until your next turn, which comes
+            after {Math.ceil(cls.recovery / 2)} ticks instead of {cls.recovery}.
           </span>
         </button>
       </div>
@@ -886,38 +996,19 @@ function TurnPanel({
             go straight to an ability.
           </span>
         )}
-        {!error && stage === 3 && (
+        {!error && stage === 3 && !forecast && (
           <span className={clsx('text-vellum/70')}>
             Click a highlighted slot to aim {chosenAbility?.name}. Hover to
             preview it.
           </span>
         )}
+        {!error && stage === 3 && forecast && chosenAbility && (
+          <ForecastView forecast={forecast} name={chosenAbility.name} />
+        )}
         {stage === 4 && chosenAbility && (
           <>
-            <span>
-              <strong>{chosenAbility.name}</strong> lands in{' '}
-              {chosenAbility.speed} tick
-              {chosenAbility.speed === 1 ? '' : 's'}, on whoever is in the slot
-              then.
-            </span>
-            {empty && (
-              <span
-                role="status"
-                className={clsx(
-                  'basis-full',
-                  'rounded-md',
-                  'border',
-                  'border-oxblood-light/60',
-                  'bg-oxblood/30',
-                  'px-2',
-                  'py-1',
-                  'text-sm',
-                  'text-vellum',
-                )}
-              >
-                No one is there right now. This only hits if someone moves in
-                before it lands.
-              </span>
+            {forecast && (
+              <ForecastView forecast={forecast} name={chosenAbility.name} />
             )}
             <button
               type="button"
@@ -1168,5 +1259,79 @@ function Chronicle({
         <li ref={end} aria-hidden />
       </ol>
     </section>
+  );
+}
+
+/** The hovered or chosen target, in words: what happens, and who can react. */
+function ForecastView({
+  forecast,
+  name,
+}: {
+  forecast: Forecast;
+  name: string;
+}) {
+  const when = `${forecast.ticks} tick${forecast.ticks === 1 ? '' : 's'}`;
+  return (
+    <div
+      role="status"
+      className={clsx(
+        'flex',
+        'basis-full',
+        'flex-col',
+        'gap-1.5',
+        'rounded-lg',
+        'border',
+        'border-storm/40',
+        'bg-umber/60',
+        'px-3',
+        'py-2',
+        'text-sm',
+      )}
+    >
+      <p className={clsx('text-vellum/70')}>
+        <strong className={clsx('text-storm')}>{name}</strong> lands in {when}.{' '}
+        {forecast.before.length
+          ? `Before it lands: ${forecast.before.join(', ')}.`
+          : 'Nobody acts before it lands.'}
+      </p>
+      {forecast.lines.length === 0 ? (
+        <p className={clsx('text-vellum')}>
+          No one is there right now. It only hits if someone moves in before it
+          lands.
+        </p>
+      ) : (
+        <ul className={clsx('flex', 'flex-col', 'gap-1')}>
+          {forecast.lines.map((l) => (
+            <li
+              key={l.text}
+              className={clsx('flex', 'flex-wrap', 'items-baseline', 'gap-x-2')}
+            >
+              <span
+                className={clsx(
+                  'font-semibold',
+                  l.foe ? 'text-vellum' : 'text-oxblood-light',
+                )}
+              >
+                {l.text}
+              </span>
+              {l.dodge && (
+                <span
+                  className={clsx(
+                    'rounded',
+                    'px-1.5',
+                    'text-xs',
+                    l.dodge.startsWith('Its turn')
+                      ? ['bg-oxblood/40', 'text-vellum']
+                      : ['bg-verdigris/50', 'text-vellum'],
+                  )}
+                >
+                  {l.dodge}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

@@ -185,29 +185,84 @@ describe('reach and line of fire', () => {
 });
 
 describe('queued actions', () => {
-  it('land on whoever is in the slot, or miss if it moved away', () => {
+  it('lock onto their target, so it dodges by moving and a braced hero takes 1 less', () => {
     const setup = () =>
       createBattle([
         hero('c', 0, 'crossbowman', 1, BACK, 1, ['bolt', 'heavyBolt']),
         hero('k', 1, 'knight', 1, FRONT, 2),
         bystander(1),
       ]);
-    const hitState = play(
+    const braced = play(
       setup(),
       act('c', 'heavyBolt', 0, FRONT),
       wait('k'),
     ).state;
-    expect(lost(hitState, 'k')).toBe(abilities.heavyBolt!.damage);
-    const missed = play(
+    expect(lost(braced, 'k')).toBe(abilities.heavyBolt!.damage - 1);
+    const { state: missed, events } = play(
       setup(),
       act('c', 'heavyBolt', 0, FRONT),
       move('k', 2, FRONT),
       wait('k'),
-    ).state;
+    );
     expect(lost(missed, 'k')).toBe(0);
+    expect(events.some((e) => e.type === 'dodged' && e.unitId === 'k')).toBe(
+      true,
+    );
   });
 
-  it('shift with the attacker when an ally swaps with it', () => {
+  it('spare a hero that steps into the slot after the lock', () => {
+    const s = createBattle([
+      hero('s', 0, 'stormcaller', 1, BACK, 1, ['spark', 'thunder']),
+      hero('a', 1, 'knight', 1, FRONT, 2),
+      hero('b', 1, 'knight', 2, FRONT, 2),
+      bystander(1),
+    ]);
+    const { state } = play(
+      s,
+      act('s', 'thunder', 0, FRONT),
+      move('a', 0, FRONT),
+      wait('a'),
+      move('b', 1, FRONT),
+      act('b', 'bodyguard', 0, FRONT),
+    );
+    expect(lost(state, 'a')).toBe(0);
+    expect(lost(state, 'b')).toBe(0);
+  });
+
+  it('hit whoever is there when aimed at an empty slot', () => {
+    const s = createBattle([
+      hero('s', 0, 'stormcaller', 1, BACK, 1, ['spark', 'thunder']),
+      hero('b', 1, 'knight', 2, FRONT, 2),
+      bystander(1),
+    ]);
+    const { state } = play(
+      s,
+      act('s', 'thunder', 0, FRONT),
+      move('b', 1, FRONT),
+      act('b', 'bodyguard', 0, FRONT),
+    );
+    expect(lost(state, 'b')).toBe(abilities.thunder!.damage);
+  });
+
+  it('stop a direct shot at a hero who steps in front of its target', () => {
+    const s = createBattle([
+      hero('c', 0, 'crossbowman', 1, BACK, 1, ['bolt', 'heavyBolt']),
+      hero('w', 1, 'stormcaller', 1, BACK, 9),
+      hero('k', 1, 'knight', 2, FRONT, 2),
+      bystander(1),
+    ]);
+    const { state, events } = play(
+      s,
+      act('c', 'heavyBolt', 0, FRONT),
+      move('k', 1, FRONT),
+      act('k', 'bodyguard', 0, FRONT),
+    );
+    expect(lost(state, 'w')).toBe(0);
+    expect(lost(state, 'k')).toBe(abilities.heavyBolt!.damage);
+    expect(events.some((e) => e.type === 'bodyBlocked')).toBe(true);
+  });
+
+  it('miss when an ally swap moves the attacker off its target', () => {
     const s = createBattle([
       hero('c', 0, 'crossbowman', 1, BACK, 1, ['bolt', 'heavyBolt']),
       hero('ally', 0, 'knight', 2, BACK, 2),
@@ -223,7 +278,7 @@ describe('queued actions', () => {
       { col: 2, row: FRONT },
     ]);
     const { state } = play(queued, wait('ally'));
-    expect(lost(state, 'f')).toBe(abilities.heavyBolt!.damage);
+    expect(lost(state, 'f')).toBe(0);
     expect(lost(state, 'e')).toBe(0);
   });
 
@@ -477,7 +532,7 @@ describe('slot statuses', () => {
     ]);
     const { state } = play(s, act('w', 'hellfire', 0, FRONT));
     expect(state.grounds.filter((g) => g.kind === 'fire')).toHaveLength(4);
-    expect(lost(state, 'e')).toBe(1 + 1);
+    expect(lost(state, 'e')).toBe(1); // the fire only: no impact damage at level 0
   });
 
   it('smoke stops the hero standing in it from acting and fizzles its queue', () => {
@@ -803,5 +858,61 @@ describe('empty aims', () => {
       hero('d', 1, 'deathKnight', 0, FRONT, 5),
     ]);
     expect(hitsNothing(lined, 'k', 'bash', { dc: 0, row: FRONT })).toBe(false);
+  });
+});
+
+describe('scatter shot', () => {
+  it('hits the first hero in each lane beside the shooter, not the one ahead', () => {
+    const s = createBattle([
+      hero('c', 0, 'crossbowman', 1, BACK, 1, ['scatterShot', 'expose']),
+      hero('a', 1, 'knight', 0, FRONT, 9),
+      hero('e', 1, 'stormcaller', 0, BACK, 9),
+      hero('f', 1, 'stormcaller', 2, BACK, 9),
+      hero('b', 1, 'knight', 1, FRONT, 9),
+      hero('d', 1, 'knight', 2, FRONT, 9),
+    ]);
+    const c = s.units.find((u) => u.id === 'c')!;
+    expect(aimOptions(s, c, 'scatterShot')).toEqual([{ dc: 0, row: FRONT }]);
+    const { slots } = actionSlots(s, {
+      seq: 0,
+      owner: 0,
+      unitId: 'c',
+      abilityId: 'scatterShot',
+      dc: 0,
+      row: FRONT,
+      at: 3,
+      targets: [],
+    });
+    // The knights in front cover the stormcallers behind them.
+    expect(slots).toEqual([
+      { col: 0, row: FRONT },
+      { col: 2, row: FRONT },
+    ]);
+  });
+});
+
+describe('shot paths', () => {
+  it('lets a lob fly over a front-liner that stops a direct shot', () => {
+    const s = createBattle([
+      hero('c', 0, 'crossbowman', 0, BACK, 1, ['bolt', 'expose']),
+      hero('r', 0, 'ranger', 1, BACK, 2, ['arrow', 'frostArrow']),
+      hero('k', 1, 'knight', 0, FRONT, 9),
+      hero('w', 1, 'stormcaller', 0, BACK, 9),
+    ]);
+    expect(abilities.bolt!.path).toBe('direct');
+    expect(abilities.arrow!.path).toBe('lob');
+    const at = (unitId: string, abilityId: string, dc: number, row: Row) =>
+      actionSlots(s, {
+        seq: 0,
+        owner: 0,
+        unitId,
+        abilityId,
+        dc,
+        row,
+        at: 3,
+        targets: [],
+      }).slots;
+    expect(at('c', 'bolt', 0, FRONT)).toEqual([{ col: 0, row: FRONT }]);
+    expect(at('r', 'arrow', -1, BACK)).toEqual([{ col: 0, row: BACK }]);
   });
 });

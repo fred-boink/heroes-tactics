@@ -5,15 +5,31 @@ import {
   abilityText,
   factionClasses,
   heroClasses,
+  randomLevels,
   rolePool,
+  stagePoints,
   unitAbility,
-  upgradePoints,
   type Faction,
   type HeroClass,
+  type Stage,
 } from '@tactics/rules';
-import { factionNames, kindNames, type GameConfig, type Mode } from './game';
+import {
+  difficulties,
+  factionNames,
+  kindNames,
+  type Difficulty,
+  type GameConfig,
+  type Mode,
+} from './game';
 
 const factions: Faction[] = ['light', 'dark', 'nature'];
+const stages: Stage[] = ['early', 'mid', 'late'];
+const stageNames: Record<Stage, string> = {
+  early: 'Early game',
+  mid: 'Mid game',
+  late: 'Late game',
+};
+const pickOne = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)]!;
 
 const factionBlurb: Record<Faction, string> = {
   light:
@@ -41,13 +57,58 @@ function defaultBuilds(faction: Faction): Builds {
   );
 }
 
+/** Random abilities from the whole role pool, spending every level point. */
+function randomBuilds(faction: Faction, points: number): Builds {
+  return Object.fromEntries(
+    factionClasses(faction).map((c) => {
+      const primary = pickOne(rolePool(c.role, 'primary'));
+      const secondary = pickOne(rolePool(c.role, 'secondary'));
+      return [
+        c.id,
+        {
+          primary,
+          secondary,
+          levels: randomLevels([primary, secondary], Math.random, points),
+        },
+      ];
+    }),
+  );
+}
+
 function spent(build: Build) {
   return Object.values(build.levels).reduce((a, b) => a + b, 0);
 }
 
+/** Lowers levels, highest first, until a build fits the stage's points. */
+function fitLevels(build: Build, points: number): Build {
+  const levels = { ...build.levels };
+  let over = spent(build) - points;
+  while (over > 0) {
+    const [id, level] = Object.entries(levels).sort((a, b) => b[1] - a[1])[0]!;
+    if (level > 1) levels[id] = level - 1;
+    else delete levels[id];
+    over--;
+  }
+  return { ...build, levels };
+}
+
+const chip = clsx(
+  'rounded-full',
+  'border',
+  'px-3',
+  'py-1',
+  'text-sm',
+  'transition-colors',
+);
+const chipOn = clsx('border-brass', 'bg-brass', 'text-ink');
+const chipOff = clsx('border-brass/40', 'text-vellum', 'hover:border-brass');
+
 export function Setup({ onStart }: { onStart: (config: GameConfig) => void }) {
   const [mode, setMode] = useState<Mode>('bot');
   const [picks, setPicks] = useState<[Faction, Faction]>(['light', 'dark']);
+  const [stage, setStage] = useState<Stage>('mid');
+  const [difficulty, setDifficulty] = useState<Difficulty>('normal');
+  const points = stagePoints[stage];
   const [builds, setBuilds] = useState<[Builds, Builds]>([
     defaultBuilds('light'),
     defaultBuilds('dark'),
@@ -60,6 +121,30 @@ export function Setup({ onStart }: { onStart: (config: GameConfig) => void }) {
     const next = [...builds] as [Builds, Builds];
     next[side] = defaultBuilds(faction);
     setBuilds(next);
+  };
+
+  const chooseStage = (next: Stage) => {
+    setStage(next);
+    const fit = (b: Builds) =>
+      Object.fromEntries(
+        Object.entries(b).map(([c, x]) => [c, fitLevels(x, stagePoints[next])]),
+      );
+    setBuilds([fit(builds[0]), fit(builds[1])]);
+  };
+
+  /** Random factions and builds for both sides, equally levelled. */
+  const randomize = (choice: Stage | 'any') => {
+    const next = choice === 'any' ? pickOne(stages) : choice;
+    const nextPicks: [Faction, Faction] = [
+      pickOne(factions),
+      pickOne(factions),
+    ];
+    setStage(next);
+    setPicks(nextPicks);
+    setBuilds([
+      randomBuilds(nextPicks[0], stagePoints[next]),
+      randomBuilds(nextPicks[1], stagePoints[next]),
+    ]);
   };
 
   const update = (side: 0 | 1, classId: string, build: Build) => {
@@ -83,6 +168,8 @@ export function Setup({ onStart }: { onStart: (config: GameConfig) => void }) {
       factions: picks,
       loadouts: [a.loadouts, b.loadouts],
       levels: [a.levels, b.levels],
+      stage,
+      difficulty,
       seed: Math.floor(Math.random() * 1_000_000),
     });
   };
@@ -147,6 +234,115 @@ export function Setup({ onStart }: { onStart: (config: GameConfig) => void }) {
           </button>
         ))}
       </fieldset>
+
+      {mode === 'bot' && (
+        <div
+          role="group"
+          aria-label="Bot difficulty"
+          className={clsx(
+            'flex',
+            'flex-wrap',
+            'items-center',
+            'gap-2',
+            '-mt-4',
+          )}
+        >
+          <span
+            className={clsx(
+              'text-xs',
+              'uppercase',
+              'tracking-wider',
+              'text-vellum/55',
+            )}
+          >
+            Bot
+          </span>
+          {(Object.keys(difficulties) as Difficulty[]).map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDifficulty(d)}
+              aria-pressed={difficulty === d}
+              className={clsx(chip, difficulty === d ? chipOn : chipOff)}
+            >
+              {difficulties[d].name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div
+        className={clsx(
+          'flex',
+          'flex-wrap',
+          'items-center',
+          'gap-x-6',
+          'gap-y-3',
+          'rounded-2xl',
+          'border',
+          'border-brass/25',
+          'bg-umber/40',
+          'px-4',
+          'py-3',
+        )}
+      >
+        <div
+          role="group"
+          aria-label="Stage"
+          className={clsx('flex', 'flex-wrap', 'items-center', 'gap-2')}
+        >
+          <span
+            className={clsx(
+              'text-xs',
+              'uppercase',
+              'tracking-wider',
+              'text-vellum/55',
+            )}
+          >
+            Stage
+          </span>
+          {stages.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => chooseStage(s)}
+              aria-pressed={stage === s}
+              className={clsx(chip, stage === s ? chipOn : chipOff)}
+            >
+              {stageNames[s]}
+              <span className={clsx('ml-1.5', 'text-xs', 'opacity-70')}>
+                {stagePoints[s]} pts
+              </span>
+            </button>
+          ))}
+        </div>
+        <div
+          role="group"
+          aria-label="Randomize both sides"
+          className={clsx('flex', 'flex-wrap', 'items-center', 'gap-2')}
+        >
+          <span
+            className={clsx(
+              'text-xs',
+              'uppercase',
+              'tracking-wider',
+              'text-vellum/55',
+            )}
+          >
+            Randomize
+          </span>
+          {(['any', ...stages] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => randomize(s)}
+              className={clsx(chip, chipOff)}
+            >
+              {s === 'any' ? 'Any stage' : stageNames[s]}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className={clsx('grid', 'gap-6', 'lg:grid-cols-2')}>
         {([0, 1] as const).map((side) => (
@@ -215,6 +411,7 @@ export function Setup({ onStart }: { onStart: (config: GameConfig) => void }) {
                   key={c.id}
                   heroClass={c}
                   build={builds[side][c.id]!}
+                  points={points}
                   onChange={(b) => update(side, c.id, b)}
                 />
               ))}
@@ -251,13 +448,15 @@ export function Setup({ onStart }: { onStart: (config: GameConfig) => void }) {
 function HeroBuilder({
   heroClass: c,
   build,
+  points,
   onChange,
 }: {
   heroClass: HeroClass;
   build: Build;
+  points: number;
   onChange: (b: Build) => void;
 }) {
-  const left = upgradePoints - spent(build);
+  const left = points - spent(build);
   const choose = (slot: 'primary' | 'secondary', id: string) => {
     const levels = { ...build.levels };
     delete levels[build[slot]];
@@ -420,7 +619,7 @@ function HeroBuilder({
         <span className={clsx('text-xs', 'text-vellum/60')}>
           {c.maxHp} health · acts every {c.recovery} ticks ·{' '}
           <span className={clsx(left > 0 ? 'text-storm' : 'text-vellum/60')}>
-            {left} of {upgradePoints} level points left
+            {left} of {points} level points left
           </span>
         </span>
       </div>

@@ -16,6 +16,7 @@ import {
   type Unit,
 } from '@tactics/rules';
 import { Portrait } from './Portrait';
+import type { Floater } from './effects';
 import { slotKey, statusIcons } from './game';
 
 export interface Threat {
@@ -25,6 +26,8 @@ export interface Threat {
   effects: string[];
   statuses: Status[];
   moved: boolean;
+  /** The hero gets a turn before the first of these lands, so it can move away. */
+  canDodge: boolean;
 }
 
 export interface StageProps {
@@ -47,7 +50,8 @@ export interface StageProps {
     statuses?: Map<string, Status[]>;
   };
   threats: Map<string, Threat>;
-  hurt: Set<string>;
+  /** Pop-ups for what just landed. */
+  floaters: Floater[];
   onSlot: (side: PlayerId, slot: Slot) => void;
   onHoverSlot: (key: string | null) => void;
   onHoverUnit: (id: string | null) => void;
@@ -172,7 +176,7 @@ function SlotCell({
   zoneTone,
   preview,
   threats,
-  hurt,
+  floaters,
   onSlot,
   onHoverSlot,
   onHoverUnit,
@@ -311,12 +315,16 @@ function SlotCell({
           mine={unit.owner === viewer}
           active={unit.id === activeId}
           inspected={unit.id === inspectId}
-          hurt={hurt.has(unit.id)}
           predicted={predicted}
           predictedStatuses={preview.statuses?.get(unit.id)}
           threat={threats.get(unit.id)}
         />
       )}
+      {floaters
+        .filter((f) => f.slot === k)
+        .map((f) => (
+          <FloaterMark key={f.id} floater={f} />
+        ))}
       {move && !unit && (
         <span
           className={clsx(
@@ -341,7 +349,6 @@ function Token({
   mine,
   active,
   inspected,
-  hurt,
   predicted,
   predictedStatuses,
   threat,
@@ -350,7 +357,6 @@ function Token({
   mine: boolean;
   active: boolean;
   inspected: boolean;
-  hurt: boolean;
   predicted: number | null | undefined;
   predictedStatuses: Status[] | undefined;
   threat: Threat | undefined;
@@ -369,6 +375,10 @@ function Token({
     unit.rooted && ['🌿', "Rooted: can't move next turn"],
     unit.taunting && ['⚑', 'Taunting'],
     unit.guarding && ['⛨', 'Bodyguard'],
+    unit.braced && [
+      '🪖',
+      'Braced: takes 1 less damage from each hit until its next turn',
+    ],
     unit.marked && ['🎯', 'Marked: the next hit does 1 more'],
     unit.weak && ['💧', 'Weak: its next hit does 1 less'],
   ].filter((x): x is [string, string] => Boolean(x));
@@ -385,9 +395,9 @@ function Token({
         'justify-center',
         'gap-1',
         'p-1',
-        hurt && 'hurt',
         predicted === null && 'opacity-40',
       )}
+      style={{ viewTransitionName: `hero-${unit.id}` }}
     >
       <span
         className={clsx(
@@ -468,34 +478,55 @@ function Token({
         loss === 0 &&
         !predictedStatuses?.length && (
           <span
-            title={`Incoming within ${threat.ticks} tick${threat.ticks === 1 ? '' : 's'}: ${threat.effects.join(', ')}`}
+            title={`${threat.effects.join(', ')} land${threat.effects.length === 1 ? 's' : ''} in ${threat.ticks} tick${threat.ticks === 1 ? '' : 's'}. ${
+              threat.canDodge
+                ? 'This hero gets a turn first and can step out of the way.'
+                : 'It lands before this hero’s next turn: only an ally swapping it out can save it.'
+            }`}
             className={clsx(
               'absolute',
               'left-1',
               'top-1',
+              'z-10',
               'flex',
-              'items-center',
-              'gap-0.5',
+              'flex-col',
+              'items-start',
               'rounded-md',
-              'bg-danger',
               'px-1.5',
               'py-0.5',
-              'text-xs',
-              'font-bold',
-              'leading-none',
-              'text-vellum',
-              'shadow',
+              'leading-tight',
+              'shadow-md',
+              threat.canDodge
+                ? ['border-2', 'border-danger', 'bg-ink/90', 'text-vellum']
+                : ['bg-danger', 'text-vellum'],
             )}
           >
-            {threat.damage > 0 && <span>−{threat.damage}</span>}
-            {threat.statuses.map((st) => (
-              <span key={st} aria-hidden>
-                {statusIcons[st]}
-              </span>
-            ))}
-            {threat.moved && <span aria-hidden>⇄</span>}
-            <span className={clsx('font-normal', 'opacity-80')}>
-              in {threat.ticks}
+            <span
+              className={clsx(
+                'flex',
+                'items-center',
+                'gap-1',
+                'text-base',
+                'font-bold',
+              )}
+            >
+              {threat.damage > 0 && <span>−{threat.damage}</span>}
+              {threat.statuses.map((st) => (
+                <span key={st} aria-hidden>
+                  {statusIcons[st]}
+                </span>
+              ))}
+              {threat.moved && <span aria-hidden>⇄</span>}
+            </span>
+            <span
+              className={clsx(
+                'text-[0.6rem]',
+                'font-semibold',
+                'uppercase',
+                'tracking-wide',
+              )}
+            >
+              {threat.canDodge ? 'can dodge' : 'can’t dodge'}
             </span>
           </span>
         )}
@@ -660,5 +691,58 @@ function SideName({
         </span>
       )}
     </p>
+  );
+}
+
+function FloaterMark({ floater: f }: { floater: Floater }) {
+  const delay = { animationDelay: `${f.delay}ms` };
+  return (
+    <>
+      {f.flash && (
+        <span
+          aria-hidden
+          style={delay}
+          className={clsx(
+            'hit-flash',
+            'pointer-events-none',
+            'absolute',
+            'inset-0',
+            'z-20',
+            f.tone === 'ko' ? 'bg-ink' : 'bg-danger',
+          )}
+        />
+      )}
+      <span
+        aria-hidden
+        style={{ ...delay, marginTop: `${-40 + f.stack * 26}px` }}
+        className={clsx(
+          'floater',
+          'pointer-events-none',
+          'absolute',
+          'left-1/2',
+          'top-1/2',
+          'z-30',
+          '-translate-x-1/2',
+          'whitespace-nowrap',
+          'rounded-md',
+          'px-2',
+          'py-0.5',
+          'font-display',
+          'font-bold',
+          'leading-none',
+          'shadow-lg',
+          {
+            damage: ['bg-danger', 'text-2xl', 'text-vellum'],
+            ko: ['bg-ink', 'text-2xl', 'text-vellum'],
+            heal: ['bg-verdigris', 'text-2xl', 'text-vellum'],
+            status: ['bg-ink/85', 'text-xl'],
+            block: ['bg-slate', 'text-base', 'text-vellum'],
+            miss: ['bg-ink/70', 'text-base', 'text-vellum/80', 'italic'],
+          }[f.tone],
+        )}
+      >
+        {f.text}
+      </span>
+    </>
   );
 }

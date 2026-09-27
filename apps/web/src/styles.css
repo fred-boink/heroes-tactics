@@ -80,11 +80,65 @@ body {
   animation: hurt 240ms ease;
 }
 
+/* Pop-ups when an action lands: they wait out their delay invisible. */
+@keyframes floater {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.7);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(0) scale(1.2);
+  }
+  24% {
+    transform: translateY(0) scale(1);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-22px) scale(1);
+  }
+}
+
+.floater {
+  animation: floater 1100ms ease-out both;
+}
+
+@keyframes hit-flash {
+  0% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.75;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.hit-flash {
+  animation: hit-flash 500ms ease-out both;
+}
+
+/* Heroes slide between slots when a move or push is committed. */
+::view-transition-group(*) {
+  animation-duration: 280ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .piece {
     transition: none;
   }
   .hurt {
     animation: none;
+  }
+  .floater {
+    animation-name: none;
+  }
+  .hit-flash {
+    animation: none;
+    opacity: 0;
   }
 }

@@ -34,6 +34,13 @@ export interface BotOptions {
   style?: 'greedy' | 'static' | 'random' | 'lookahead';
   /** Lookahead only: how many of the best greedy plans to test. */
   breadth?: number;
+  /**
+   * Chance each turn (0–1) that it reads the enemy's queued actions. When it
+   * doesn't, it plans as if they weren't there, so it won't dodge them.
+   */
+  awareness?: number;
+  /** Chance each turn (0–1) that it picks any legal plan at random. */
+  blunder?: number;
 }
 
 export function chooseActivation(
@@ -45,7 +52,9 @@ export function chooseActivation(
   const me = unit.owner;
   const random = options.random ?? Math.random;
   const noise = options.noise ?? 0.3;
-  const style = options.style ?? 'greedy';
+  const blundering = random() < (options.blunder ?? 0);
+  const style = blundering ? 'random' : (options.style ?? 'greedy');
+  const aware = random() < (options.awareness ?? 1);
   const plans: Command[][] = [];
   const scored: { score: number; plan: Command[]; after: BattleState }[] = [];
 
@@ -64,7 +73,10 @@ export function chooseActivation(
       if (!r.ok) return;
       s = r.state;
     }
-    const score = evaluate(forecast(s), me) + random() * noise;
+    const seen = aware
+      ? s
+      : { ...s, queue: s.queue.filter((q) => q.owner === me) };
+    const score = evaluate(forecast(seen), me) + random() * noise;
     if (style === 'lookahead')
       scored.push({ score, plan: [...prefix, ...plan], after: s });
     if (score > best.score) best = { score, plan: [...prefix, ...plan] };

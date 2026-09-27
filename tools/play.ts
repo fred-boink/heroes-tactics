@@ -64,7 +64,11 @@ function describe(s: BattleState, e: BattleEvent): string | null {
     case 'moved':
       return `${name(s, e.unitId)} moves ${e.from.col}${e.from.row ? 'b' : 'f'}→${e.to.col}${e.to.row ? 'b' : 'f'}`;
     case 'waited':
-      return `${name(s, e.unitId)} waits`;
+      return `${name(s, e.unitId)} braces`;
+    case 'dodged':
+      return `${name(s, e.unitId)} dodges`;
+    case 'bodyBlocked':
+      return `${name(s, e.unitId)} blocks the shot for ${name(s, e.protectedId)}`;
     case 'shieldBlocked':
       return `${name(s, e.unitId)}'s shield blocks`;
     case 'guarded':
