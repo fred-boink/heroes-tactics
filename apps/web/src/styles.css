@@ -1,0 +1,90 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-umber: #1d1612;
+  --color-walnut: #3a2a20;
+  --color-walnut-light: #4a372a;
+  --color-brass: #b8955a;
+  --color-vellum: #d6c59c;
+  --color-vellum-dark: #c4b184;
+  --color-ink: #2a2320;
+  --color-ink-soft: #5a4d42;
+  --color-verdigris: #3f7f74;
+  --color-verdigris-light: #6fb3a6;
+  --color-oxblood: #8c2f2a;
+  --color-oxblood-light: #c2574f;
+  --color-slate: #6b5d52;
+  --color-water: #2f5563;
+  --color-fire: #d9772b;
+  --color-frost: #9cc3d5;
+  --color-storm: #e8d27a;
+  --color-move: #2f6df0;
+  --color-danger: #e2302a;
+
+  --font-display: 'IM Fell English SC', 'Iowan Old Style', Georgia, serif;
+  --font-body: 'Alegreya Sans', 'Gill Sans', system-ui, sans-serif;
+}
+
+html {
+  background-color: var(--color-umber);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(
+      ellipse at 50% 0%,
+      #3a2a20 0%,
+      #2b201a 45%,
+      #1d1612 100%
+    )
+    fixed;
+  color: var(--color-vellum);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-storm);
+  outline-offset: 2px;
+}
+
+/* Pieces slide when they move or are pushed. */
+.piece {
+  transition:
+    left 260ms ease,
+    top 260ms ease,
+    opacity 260ms ease;
+}
+
+@keyframes hurt {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+.hurt {
+  animation: hurt 240ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .piece {
+    transition: none;
+  }
+  .hurt {
+    animation: none;
+  }
+}

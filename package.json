@@ -1,0 +1,31 @@
+{
+  "name": "heroes-tactics",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.17.1",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @tactics/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "tsc --noEmit && pnpm -r typecheck",
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "sim": "tsx tools/sim.ts",
+    "skill": "tsx tools/skill.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "prettier": "^3.9.9",
+    "typescript": "~5.9.2",
+    "vitest": "^3.2.4",
+    "tsx": "^4.23.15"
+  },
+  "dependencies": {
+    "@tactics/bot": "workspace:*",
+    "@tactics/rules": "workspace:*"
+  }
+}
