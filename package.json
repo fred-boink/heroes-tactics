@@ -15,7 +15,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "sim": "tsx tools/sim.ts",
-    "skill": "tsx tools/skill.ts"
+    "skill": "tsx tools/skill.ts",
+    "play": "tsx tools/play.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",

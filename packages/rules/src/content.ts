@@ -1,5 +1,6 @@
 import type {
   AbilityDef,
+  Role,
   AbilityEffect,
   AbilityKind,
   AbilityStats,
@@ -29,7 +30,7 @@ function ab(
     eitherSide?: boolean;
     upgrades?: Upgrade[];
   } = {},
-): Omit<AbilityDef, 'id'> {
+): Omit<AbilityDef, 'id' | 'role' | 'slot'> {
   return { name, kind, reach, speed, damage, pattern: 'single', ...extra };
 }
 
@@ -40,14 +41,24 @@ const up = (
   changes: Partial<AbilityStats>,
 ): Upgrade => ({ id, name, cost, changes });
 
-const plusOne = (damage: number) =>
-  up('power', '+1 damage', 2, { damage: damage + 1 });
-const faster = (speed: number) =>
-  up('quick', 'Faster (−1 tick)', speed > 1 ? 2 : 1, { speed: speed - 1 });
+const plusOne = (_base?: number): Upgrade => ({
+  id: 'power',
+  name: '+1 damage',
+  cost: 2,
+  changes: {},
+  bonus: { damage: 1 },
+});
+const faster = (speed: number): Upgrade => ({
+  id: 'quick',
+  name: 'Faster (−1 tick)',
+  cost: speed > 1 ? 2 : 1,
+  changes: {},
+  bonus: { speed: -1 },
+});
 
-const defs: Record<string, Omit<AbilityDef, 'id'>> = {
+const defs: Record<string, Omit<AbilityDef, 'id' | 'role' | 'slot'>> = {
   // Light: Knight
-  bash: ab('Bash', 'melee', 'meleeFront', 1, 1, {
+  bash: ab('Bash', 'melee', 'meleeFront', 1, 2, {
     upgrades: [plusOne(1), up('daze', 'Weakens', 1, { effect: 'weak' })],
   }),
   cleave: ab('Cleave', 'melee', 'meleeFront', 2, 1, {
@@ -69,13 +80,13 @@ const defs: Record<string, Omit<AbilityDef, 'id'>> = {
   }),
 
   // Light: Crossbowman
-  bolt: ab('Bolt', 'ranged', 'straight', 1, 1, {
+  bolt: ab('Bolt', 'ranged', 'straight', 1, 2, {
     upgrades: [plusOne(1), up('mark', 'Marks', 1, { effect: 'marked' })],
   }),
-  aimedShot: ab('Aimed Shot', 'ranged', 'any', 2, 1, {
+  aimedShot: ab('Aimed Shot', 'ranged', 'any', 1, 1, {
     upgrades: [faster(2), plusOne(1)],
   }),
-  heavyBolt: ab('Heavy Bolt', 'ranged', 'straight', 2, 2, {
+  heavyBolt: ab('Heavy Bolt', 'ranged', 'straight', 2, 3, {
     upgrades: [
       plusOne(2),
       up('stagger', 'Interrupts', 1, { effect: 'interrupt' }),
@@ -85,9 +96,17 @@ const defs: Record<string, Omit<AbilityDef, 'id'>> = {
     effect: 'root',
     upgrades: [up('frost', 'Chills instead', 1, { effect: 'chill', ticks: 2 })],
   }),
-  suppress: ab('Suppress', 'ranged', 'straight', 1, 0, {
+  suppress: ab('Suppress', 'ranged', 'straight', 1, 1, {
     effect: 'weak',
-    upgrades: [up('power', '+1 damage', 1, { damage: 1 })],
+    upgrades: [
+      {
+        id: 'power',
+        name: '+1 damage',
+        cost: 1,
+        changes: {},
+        bonus: { damage: 1 },
+      },
+    ],
   }),
 
   // Light: Stormcaller
@@ -127,12 +146,18 @@ const defs: Record<string, Omit<AbilityDef, 'id'>> = {
     effect: 'marked',
     upgrades: [plusOne(1)],
   }),
-  dread: ab('Dread', 'melee', 'meleeFront', 1, 0, {
+  dread: ab('Dread', 'melee', 'meleeFront', 1, 1, {
     effect: 'delay',
     ticks: 2,
     upgrades: [
       up('more', 'Delays 3 ticks', 1, { ticks: 3 }),
-      up('power', '+1 damage', 1, { damage: 1 }),
+      {
+        id: 'power',
+        name: '+1 damage',
+        cost: 1,
+        changes: {},
+        bonus: { damage: 1 },
+      },
     ],
   }),
   drain: ab('Drain', 'melee', 'meleeFront', 1, 1, {
@@ -148,7 +173,7 @@ const defs: Record<string, Omit<AbilityDef, 'id'>> = {
   stab: ab('Stab', 'melee', 'meleeDiagonal', 1, 2, {
     upgrades: [up('bleed', 'Burns', 1, { effect: 'burn' })],
   }),
-  backstab: ab('Backstab', 'melee', 'backline', 2, 1, {
+  backstab: ab('Backstab', 'melee', 'backline', 2, 2, {
     upgrades: [plusOne(1), faster(2)],
   }),
   smokeBomb: ab('Smoke Bomb', 'ranged', 'any', 1, 0, {
@@ -165,11 +190,11 @@ const defs: Record<string, Omit<AbilityDef, 'id'>> = {
   }),
 
   // Dark: Warlock
-  fireBolt: ab('Fire Bolt', 'spell', 'any', 1, 1, {
-    effect: 'burn',
+  fireBolt: ab('Fire Bolt', 'spell', 'any', 1, 0, {
+    ground: 'fire',
     upgrades: [plusOne(1)],
   }),
-  hex: ab('Hex', 'spell', 'any', 1, 0, {
+  hex: ab('Hex', 'spell', 'any', 2, 1, {
     effect: 'weak',
     upgrades: [up('wide', 'Two slots', 1, { pattern: 'pair' })],
   }),
@@ -178,11 +203,12 @@ const defs: Record<string, Omit<AbilityDef, 'id'>> = {
     ground: 'fire',
     upgrades: [faster(3)],
   }),
-  ignite: ab('Ignite', 'spell', 'any', 1, 0, {
+  ignite: ab('Ignite', 'spell', 'any', 2, 0, {
     ground: 'fire',
-    upgrades: [up('wide', 'Two slots', 1, { pattern: 'pair' })],
+    pattern: 'pair',
+    upgrades: [faster(2)],
   }),
-  disrupt: ab('Disrupt', 'spell', 'any', 2, 0, {
+  disrupt: ab('Disrupt', 'spell', 'any', 1, 0, {
     effect: 'delay',
     ticks: 3,
     upgrades: [faster(2)],
@@ -194,16 +220,24 @@ const defs: Record<string, Omit<AbilityDef, 'id'>> = {
     ticks: 2,
     upgrades: [plusOne(1)],
   }),
-  maul: ab('Maul', 'melee', 'meleeFront', 2, 2, {
+  maul: ab('Maul', 'melee', 'meleeFront', 2, 3, {
     upgrades: [up('stagger', 'Interrupts', 1, { effect: 'interrupt' })],
   }),
   stoneWall: ab('Stone Wall', 'support', 'ownFront', 1, 0, {
     effect: 'block',
     upgrades: [faster(1)],
   }),
-  entangle: ab('Entangle', 'melee', 'meleeFront', 1, 0, {
+  entangle: ab('Entangle', 'melee', 'meleeFront', 1, 1, {
     effect: 'root',
-    upgrades: [up('power', '+1 damage', 1, { damage: 1 })],
+    upgrades: [
+      {
+        id: 'power',
+        name: '+1 damage',
+        cost: 1,
+        changes: {},
+        bonus: { damage: 1 },
+      },
+    ],
   }),
   standFirm: ab('Stand Firm', 'support', 'self', 1, 0, {
     pattern: 'row',
@@ -219,15 +253,21 @@ const defs: Record<string, Omit<AbilityDef, 'id'>> = {
     selfHaste: 1,
     upgrades: [up('more', 'Next turn 2 sooner', 1, { selfHaste: 2 })],
   }),
-  frostArrow: ab('Frost Arrow', 'ranged', 'straight', 1, 0, {
+  frostArrow: ab('Frost Arrow', 'ranged', 'straight', 1, 1, {
     effect: 'chill',
     ticks: 2,
     upgrades: [
-      up('power', '+1 damage', 1, { damage: 1 }),
+      {
+        id: 'power',
+        name: '+1 damage',
+        cost: 1,
+        changes: {},
+        bonus: { damage: 1 },
+      },
       up('field', 'Leaves frost', 1, { ground: 'frost' }),
     ],
   }),
-  volley: ab('Volley', 'ranged', 'enemyRow', 2, 1, {
+  volley: ab('Volley', 'ranged', 'enemyRow', 3, 1, {
     pattern: 'row',
     upgrades: [faster(2)],
   }),
@@ -239,11 +279,11 @@ const defs: Record<string, Omit<AbilityDef, 'id'>> = {
   // Nature: Druid
   thorns: ab('Thorns', 'spell', 'any', 1, 1, {
     upgrades: [
-      up('snare', 'Roots', 1, { effect: 'root' }),
       up('patch', 'Leaves thorns', 1, { ground: 'thorns' }),
+      up('snare', 'Roots', 1, { effect: 'root' }),
     ],
   }),
-  quake: ab('Quake', 'spell', 'enemyRow', 2, 1, {
+  quake: ab('Quake', 'spell', 'enemyRow', 3, 1, {
     pattern: 'row',
     upgrades: [up('frost', 'Chills', 1, { effect: 'chill', ticks: 2 })],
   }),
@@ -271,9 +311,13 @@ const defs: Record<string, Omit<AbilityDef, 'id'>> = {
     ticks: 1,
     upgrades: [up('more', '2 ticks sooner', 1, { ticks: 2 })],
   }),
+  // Two slots anywhere, so it never gets faster: levels mark and shield.
   scatterShot: ab('Scatter Shot', 'ranged', 'any', 2, 1, {
     pattern: 'pair',
-    upgrades: [faster(2)],
+    upgrades: [
+      up('mark', 'Marks what it hits', 1, { effect: 'marked' }),
+      up('aegis', 'Also shields itself', 1, { shieldSelf: true }),
+    ],
   }),
   concussiveBolt: ab('Concussive Bolt', 'ranged', 'straight', 1, 1, {
     effect: 'push',
@@ -285,12 +329,28 @@ const defs: Record<string, Omit<AbilityDef, 'id'>> = {
   }),
   hook: ab('Hook', 'melee', 'backline', 1, 0, {
     effect: 'pull',
-    upgrades: [up('power', '+1 damage', 1, { damage: 1 })],
+    upgrades: [
+      {
+        id: 'power',
+        name: '+1 damage',
+        cost: 1,
+        changes: {},
+        bonus: { damage: 1 },
+      },
+    ],
   }),
   sweep: ab('Sweep', 'melee', 'meleeFront', 1, 0, {
     pattern: 'pair',
     effect: 'push',
-    upgrades: [up('power', '+1 damage', 2, { damage: 1 })],
+    upgrades: [
+      {
+        id: 'power',
+        name: '+1 damage',
+        cost: 2,
+        changes: {},
+        bonus: { damage: 1 },
+      },
+    ],
   }),
   shadowstep: ab('Shadowstep', 'support', 'self', 0, 0, {
     effect: 'haste',
@@ -324,9 +384,17 @@ const defs: Record<string, Omit<AbilityDef, 'id'>> = {
     effect: 'shove',
     upgrades: [plusOne(1)],
   }),
-  uproot: ab('Uproot', 'melee', 'meleeDiagonal', 1, 0, {
+  uproot: ab('Uproot', 'melee', 'meleeDiagonal', 1, 1, {
     effect: 'shove',
-    upgrades: [up('power', '+1 damage', 1, { damage: 1 })],
+    upgrades: [
+      {
+        id: 'power',
+        name: '+1 damage',
+        cost: 1,
+        changes: {},
+        bonus: { damage: 1 },
+      },
+    ],
   }),
   gust: ab('Gust', 'spell', 'any', 1, 0, {
     effect: 'shove',
@@ -337,7 +405,16 @@ const defs: Record<string, Omit<AbilityDef, 'id'>> = {
     pattern: 'pair',
     effect: 'twist',
     eitherSide: true,
-    upgrades: [faster(2), up('power', '+1 damage', 2, { damage: 1 })],
+    upgrades: [
+      faster(2),
+      {
+        id: 'power',
+        name: '+1 damage',
+        cost: 2,
+        changes: {},
+        bonus: { damage: 1 },
+      },
+    ],
   }),
   intervene: ab('Intervene', 'support', 'anyAlly', 0, 0, {
     effect: 'intervene',
@@ -347,16 +424,22 @@ const defs: Record<string, Omit<AbilityDef, 'id'>> = {
     effect: 'relocate',
     upgrades: [faster(1)],
   }),
-};
 
-export const abilities: Record<string, AbilityDef> = Object.fromEntries(
-  Object.entries(defs).map(([id, d]) => [id, { id, ...d }]),
-);
+  // Dark's ranged skirmisher.
+  throwingKnives: ab('Throwing Knives', 'ranged', 'straight', 1, 2, {
+    upgrades: [plusOne(), up('mark', 'Marks', 1, { effect: 'marked' })],
+  }),
+  poisonDart: ab('Poison Dart', 'ranged', 'any', 1, 0, {
+    effect: 'burn',
+    upgrades: [plusOne(), up('weak', 'Also weakens', 1, { effect: 'weak' })],
+  }),
+};
 
 const hero = (
   id: string,
   name: string,
   faction: HeroClass['faction'],
+  role: Role,
   maxHp: number,
   recovery: number,
   primaries: string[],
@@ -365,6 +448,7 @@ const hero = (
   id,
   name,
   faction,
+  role,
   maxHp,
   recovery,
   primaries,
@@ -377,6 +461,7 @@ export const heroClasses: Record<string, HeroClass> = Object.fromEntries(
       'knight',
       'Knight',
       'light',
+      'warrior',
       4,
       5,
       ['bash', 'cleave', 'shieldBash'],
@@ -386,6 +471,7 @@ export const heroClasses: Record<string, HeroClass> = Object.fromEntries(
       'crossbowman',
       'Crossbowman',
       'light',
+      'ranged',
       3,
       4,
       ['bolt', 'aimedShot', 'scatterShot'],
@@ -395,6 +481,7 @@ export const heroClasses: Record<string, HeroClass> = Object.fromEntries(
       'stormcaller',
       'Stormcaller',
       'light',
+      'caster',
       2,
       4,
       ['spark', 'chainLightning'],
@@ -404,24 +491,27 @@ export const heroClasses: Record<string, HeroClass> = Object.fromEntries(
       'deathKnight',
       'Death Knight',
       'dark',
+      'warrior',
       4,
       5,
-      ['reap', 'rend', 'hook'],
-      ['dread', 'drain', 'grimGuard', 'sweep'],
+      ['reap', 'rend', 'hook', 'stab', 'backstab', 'trip'],
+      ['dread', 'drain', 'grimGuard', 'sweep', 'kidneyShot'],
     ),
     hero(
       'assassin',
       'Assassin',
       'dark',
-      4,
+      'ranged',
       3,
-      ['stab', 'backstab', 'trip'],
-      ['smokeBomb', 'expose', 'kidneyShot', 'shadowstep'],
+      4,
+      ['throwingKnives', 'poisonDart'],
+      ['smokeBomb', 'expose', 'shadowstep'],
     ),
     hero(
       'warlock',
       'Warlock',
       'dark',
+      'caster',
       2,
       4,
       ['fireBolt', 'hex'],
@@ -431,6 +521,7 @@ export const heroClasses: Record<string, HeroClass> = Object.fromEntries(
       'warden',
       'Warden',
       'nature',
+      'warrior',
       4,
       5,
       ['slam', 'maul', 'heave'],
@@ -440,8 +531,9 @@ export const heroClasses: Record<string, HeroClass> = Object.fromEntries(
       'ranger',
       'Ranger',
       'nature',
+      'ranged',
       3,
-      3,
+      4,
       ['arrow', 'quickShot', 'twinArrows'],
       ['frostArrow', 'volley', 'huntersMark', 'drivingShot'],
     ),
@@ -449,6 +541,7 @@ export const heroClasses: Record<string, HeroClass> = Object.fromEntries(
       'druid',
       'Druid',
       'nature',
+      'caster',
       2,
       4,
       ['thorns', 'quake'],
@@ -456,3 +549,53 @@ export const heroClasses: Record<string, HeroClass> = Object.fromEntries(
     ),
   ].map((c) => [c.id, c]),
 );
+
+/** A second level for abilities that only list one: more damage, or faster. */
+function secondLevel(d: Omit<AbilityDef, 'id' | 'role' | 'slot'>): Upgrade {
+  if (d.damage > 0) return plusOne();
+  if (d.speed > 1) return faster(d.speed);
+  if (d.ticks)
+    return up('more', `${d.ticks + 1} ticks`, 1, { ticks: d.ticks + 1 });
+  if (d.heal) return up('more', `Heals ${d.heal + 1}`, 1, { heal: d.heal + 1 });
+  return up('aegis', 'Also shields itself', 1, { shieldSelf: true });
+}
+
+export const abilities: Record<string, AbilityDef> = Object.fromEntries(
+  Object.entries(defs).map(([id, d]) => {
+    const owner = Object.values(heroClasses).find(
+      (c) => c.primaries.includes(id) || c.secondaries.includes(id),
+    );
+    if (!owner) throw new Error(`${id} is not in any class list`);
+    const levels = [...(d.upgrades ?? [])].slice(0, 2);
+    while (levels.length < 2) {
+      const next = secondLevel({
+        ...d,
+        ...levels.reduce((x, u) => ({ ...x, ...u.changes }), {}),
+      });
+      if (levels.some((u) => u.id === next.id)) {
+        levels.push(
+          up('aegis', 'Also shields itself', 1, { shieldSelf: true }),
+        );
+      } else {
+        levels.push(next);
+      }
+    }
+    return [
+      id,
+      {
+        id,
+        ...d,
+        role: owner.role,
+        slot: owner.primaries.includes(id) ? 'primary' : 'secondary',
+        upgrades: levels.map((u) => ({ ...u, cost: 1 })),
+      } satisfies AbilityDef,
+    ];
+  }),
+);
+
+/** Abilities any hero of a role can equip in a slot. */
+export function rolePool(role: Role, slot: 'primary' | 'secondary'): string[] {
+  return Object.values(abilities)
+    .filter((a) => a.role === role && a.slot === slot)
+    .map((a) => a.id);
+}

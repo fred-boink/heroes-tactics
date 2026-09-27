@@ -29,8 +29,8 @@ export interface UnitSetup {
   pos: Slot;
   /** Up to one primary and one secondary; defaults to the first of each. */
   loadout?: string[];
-  /** Bought upgrades by ability id, within the hero's upgrade points. */
-  upgrades?: Record<string, string[]>;
+  /** Ability levels (0–2) by ability id, within the hero's upgrade points. */
+  levels?: Record<string, number>;
   /** First activation tick; defaults to the class recovery. */
   nextAt?: number;
 }
@@ -47,16 +47,19 @@ function baseAbility(id: string): AbilityDef {
   return a;
 }
 
-/** An ability as a particular hero has it, with its bought upgrades applied. */
+/** An ability as a particular hero has it, at its level. */
 export function unitAbility(
-  unit: Pick<Unit, 'upgrades'>,
+  unit: Pick<Unit, 'levels'>,
   abilityId: string,
 ): AbilityDef {
   const base = baseAbility(abilityId);
-  const bought = unit.upgrades[abilityId] ?? [];
+  const level = unit.levels[abilityId] ?? 0;
   let result: AbilityDef = base;
-  for (const u of base.upgrades ?? []) {
-    if (bought.includes(u.id)) result = { ...result, ...u.changes };
+  for (const u of (base.upgrades ?? []).slice(0, level)) {
+    result = { ...result, ...u.changes };
+    if (u.bonus?.damage) result.damage += u.bonus.damage;
+    if (u.bonus?.speed)
+      result.speed = Math.max(0, result.speed + u.bonus.speed);
   }
   return result;
 }
@@ -78,10 +81,13 @@ export function createBattle(units: UnitSetup[]): BattleState {
         owner: u.owner,
         classId: u.classId,
         loadout,
-        upgrades: validUpgrades(u, loadout),
+        levels: validLevels(u, loadout),
         hp: heroClass(u.classId).maxHp,
         pos: { ...u.pos },
-        nextAt: u.nextAt ?? heroClass(u.classId).recovery,
+        // Player 1 moves first; player 2's heroes start a tick later, so the
+        // first side gets an opening before the other can react.
+        nextAt:
+          u.nextAt ?? heroClass(u.classId).recovery + (u.owner === 1 ? 1 : 0),
         moves: 0,
         shielded: false,
         stoneskin: false,
@@ -112,42 +118,42 @@ export function createBattle(units: UnitSetup[]): BattleState {
 function validLoadout(u: UnitSetup): string[] {
   const c = heroClass(u.classId);
   const loadout = u.loadout ?? [c.primaries[0]!, c.secondaries[0]!];
-  const primaries = loadout.filter((a) => c.primaries.includes(a));
-  const secondaries = loadout.filter((a) => c.secondaries.includes(a));
+  const allowed = (id: string, slot: 'primary' | 'secondary') => {
+    const a = abilities[id];
+    return a !== undefined && a.role === c.role && a.slot === slot;
+  };
+  const primaries = loadout.filter((a) => allowed(a, 'primary'));
+  const secondaries = loadout.filter((a) => allowed(a, 'secondary'));
   if (
     primaries.length > 1 ||
     secondaries.length > 1 ||
     primaries.length + secondaries.length !== loadout.length
   ) {
-    throw new Error(`${u.id} equips one primary and one secondary`);
+    throw new Error(
+      `${u.id} equips one ${c.role} primary and one ${c.role} secondary`,
+    );
   }
   return [...primaries, ...secondaries];
 }
 
-function validUpgrades(
-  u: UnitSetup,
-  loadout: string[],
-): Record<string, string[]> {
-  const upgrades = u.upgrades ?? {};
+function validLevels(u: UnitSetup, loadout: string[]): Record<string, number> {
+  const levels = u.levels ?? {};
   let spent = 0;
-  for (const [abilityId, ids] of Object.entries(upgrades)) {
+  for (const [abilityId, level] of Object.entries(levels)) {
     if (!loadout.includes(abilityId)) {
-      throw new Error(
-        `${u.id} upgrades ${abilityId}, which it has not equipped`,
-      );
+      throw new Error(`${u.id} levels ${abilityId}, which it has not equipped`);
     }
-    for (const id of ids) {
-      const upgrade = baseAbility(abilityId).upgrades?.find((x) => x.id === id);
-      if (!upgrade) throw new Error(`Unknown upgrade ${abilityId}/${id}`);
-      spent += upgrade.cost;
+    if (!Number.isInteger(level) || level < 0 || level > 2) {
+      throw new Error(`${abilityId} levels go from 0 to 2`);
     }
+    spent += level;
   }
   if (spent > upgradePoints) {
     throw new Error(
       `${u.id} spends ${spent} upgrade points of ${upgradePoints}`,
     );
   }
-  return structuredClone(upgrades);
+  return { ...levels };
 }
 
 const other = (p: PlayerId): PlayerId => (p === 0 ? 1 : 0);
@@ -199,6 +205,16 @@ const groundTurns: Record<GroundKind, number> = {
   thorns: 2,
   barrier: 1,
 };
+
+/**
+ * When a hero's next turn really comes: never before its own queued actions
+ * have landed, whatever hastes or delays have done to either.
+ */
+export function turnAt(state: Pick<BattleState, 'queue'>, unit: Unit): number {
+  let at = unit.nextAt;
+  for (const q of state.queue) if (q.unitId === unit.id && q.at > at) at = q.at;
+  return at;
+}
 
 export function activeUnit(state: BattleState): Unit | undefined {
   return state.units.find((u) => u.id === state.activeId && u.pos);
@@ -468,6 +484,7 @@ export function timeline(state: BattleState): TimelineEntry[] {
   const active = activeUnit(state);
   const waiting = state.units
     .filter((u) => u.pos && u.id !== state.activeId)
+    .map((u) => ({ ...u, nextAt: turnAt(state, u) }))
     .sort((x, y) => x.nextAt - y.nextAt);
   const heroes: TimelineEntry[] = active
     ? [{ kind: 'hero', at: state.time, unitId: active.id, owner: active.owner }]
@@ -634,6 +651,7 @@ function advance(state: BattleState, events: BattleEvent[]) {
   state.activeId = null;
   while (state.winner === null) {
     const living = state.units.filter((u) => u.pos);
+    for (const u of living) u.nextAt = turnAt(state, u);
     const nextAction = [...state.queue].sort(
       (x, y) => x.at - y.at || x.seq - y.seq,
     )[0];
@@ -993,13 +1011,18 @@ function hit(
       break;
     case 'shove':
       if (attacker?.pos && unit.pos) {
-        const dir = unit.pos.col >= attacker.pos.col ? 1 : -1;
-        moveTo(
-          state,
-          unit,
-          { col: unit.pos.col + dir, row: unit.pos.row },
-          events,
-        );
+        // Away from the attacker: across rows in its lane, otherwise sideways.
+        if (unit.pos.col === attacker.pos.col) {
+          displace(state, unit, unit.pos.row === FRONT ? BACK : FRONT, events);
+        } else {
+          const dir = unit.pos.col > attacker.pos.col ? 1 : -1;
+          moveTo(
+            state,
+            unit,
+            { col: unit.pos.col + dir, row: unit.pos.row },
+            events,
+          );
+        }
       }
       break;
     case 'delay': {
@@ -1204,6 +1227,22 @@ export function previewAction(
   return { state: s, events };
 }
 
+/**
+ * Whether an ability aimed like this would do nothing if it landed right now:
+ * no one in its slots and no ground or block to leave behind.
+ */
+export function hitsNothing(
+  state: BattleState,
+  unitId: string,
+  abilityId: string,
+  aim: Aim,
+): boolean {
+  const idle = new Set(['landed', 'missed', 'fizzled']);
+  return previewAction(state, unitId, abilityId, aim).events.every((e) =>
+    idle.has(e.type),
+  );
+}
+
 /** Plain-language summary of an ability as a hero has it. */
 export function abilityText(a: AbilityDef): string {
   const where: Record<AbilityDef['reach'], string> = {
@@ -1238,7 +1277,8 @@ export function abilityText(a: AbilityDef): string {
     interrupt: 'cancels its queued actions',
     push: 'knocks it into the back row',
     pull: 'drags it into the front row',
-    shove: 'shoves it one lane sideways, away from you',
+    shove:
+      'shoves it one slot away from you (across rows in your lane, sideways otherwise)',
     twist: 'the two heroes there swap places',
     intervene: 'you swap places with that ally',
     relocate: 'moves the ally to the other row of its lane',

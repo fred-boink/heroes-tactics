@@ -21,10 +21,10 @@ export interface GameConfig {
   factions: [Faction, Faction];
   /** Per player, class id → equipped abilities. */
   loadouts: [Record<string, string[]>, Record<string, string[]>];
-  /** Per player, class id → ability id → bought upgrades. */
-  upgrades: [
-    Record<string, Record<string, string[]>>,
-    Record<string, Record<string, string[]>>,
+  /** Per player, class id → ability id → level (0–2). */
+  levels: [
+    Record<string, Record<string, number>>,
+    Record<string, Record<string, number>>,
   ];
   seed: number;
 }

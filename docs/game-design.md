@@ -35,7 +35,7 @@ Draft, 2026-09-27. This replaces the earlier 8×8-grid design with pushing and k
 
 ### Formation
 
-Each side has its own **4×2 formation**: 4 columns, front row and back row, 8 slots for up to 6 heroes. There's no shared board, no terrain and no pushing.
+Each side has its own **4×2 formation**: 4 lanes, front row and back row, 8 slots for up to 6 heroes. There's no shared board or terrain; heroes are moved between slots by stepping, swapping, pushes, pulls and shoves.
 
 ```
         ENEMY
@@ -47,7 +47,7 @@ Each side has its own **4×2 formation**: 4 columns, front row and back row, 8 s
         YOU
 ```
 
-- **Melee** can only hit the enemy **front row**. While any enemy front-row slot holds a hero or a stone block, the back row is safe from melee. If the front row empties, the back row can be hit.
+- **Melee** hits the enemy front slot straight ahead (a few abilities hit diagonally, or reach into the back row). Melee can only be used from your own front row.
 - **Ranged** attacks come in two kinds:
   - **Straight shots** (crossbows, Frost Arrow) fire down the attacker's own column and hit the **first hero or stone block in the way**, front row first. A front-liner shields whoever stands behind it.
   - **Arcing shots** (Arrow, Smoke Bomb) can't be obstructed and reach any slot.
@@ -66,7 +66,9 @@ NOW ─► Rg · DK → Reap (front 1) · Kn · Wl → Hellfire (back 2–3) · 
 - **Every action is queued.** On its activation a hero chooses an ability and a target **slot**. The action goes on the timeline after the ability's **attack speed** in ticks, and resolves when the timeline reaches it. Quick abilities have a speed of 1; big ones 2–3.
 - **Both players see every queued action:** who, which ability, and which slots. That's the telegraph. Aiming at slots, not heroes, is what makes it something you can play around.
 - **Aim is relative to the attacker.** Melee has a fixed shape, such as straight ahead or diagonal; ranged attacks and spells pick a slot at a column offset. If the attacker is moved before its action lands (for example, an ally swaps with it), the action shifts with it. A melee attacker moved to the back row loses its action.
-- **Ties:** queued actions resolve before heroes act on the same tick, in the order they were queued. Heroes on the same tick alternate sides.
+- **Strict order:** nothing happens at the same time. Queued actions resolve before heroes act on the same tick, in the order they were queued, and heroes on the same tick alternate sides. The turn list shows that exact order.
+- **Your action lands before your next turn.** A hero's next turn never comes before its own queued action has landed, whatever hastes or delays do.
+- **Opening:** player 1 moves first; player 2's heroes start one tick later. In simulations this gives the first side about 58–63% of wins instead of 26%, since committing first is otherwise a big disadvantage.
 
 ### An activation
 
@@ -95,11 +97,28 @@ Offensive patterns are placed on the enemy formation around a chosen slot:
 | Square  | Two adjacent columns, both rows (4 slots)                             |
 | Cross   | A slot, its left and right neighbours, and the slot above or below it |
 
-**Defensive patterns** are relative to the caster, on its own side: **self**, **adjacent** (left, right, or the slot in front of or behind it), or **behind** (the slot directly behind it).
+**Defensive patterns** are relative to the caster, on its own side: **self**, **adjacent**, or **any ally**.
+
+### Ability shapes set the power
+
+The shape of an ability decides its baseline, so players learn a few rules instead of every stat line:
+
+| Shape                           | Hits                                  | Base damage | Speed |
+| ------------------------------- | ------------------------------------- | ----------- | ----- |
+| Melee                           | The enemy front slot in reach         | 2           | 1     |
+| Straight shot                   | The first hero or block down the lane | 2           | 1     |
+| Lob                             | Any slot, over the front row          | 1           | 1     |
+| Back-row reach (Backstab, Hook) | A back slot ahead                     | 1           | 2     |
+| Two slots (pair or column)      | 2 slots                               | 1 each      | 2     |
+| Big area (row or 2×2)           | 3–4 slots                             | 1 each      | 3     |
+
+- **An effect costs 1 damage:** push, pull, shove, burn, chill, mark, weaken, root, interrupt or delay.
+- **One more tick buys 1 more damage:** Heavy Bolt is a straight shot for 3 at speed 2; Maul is melee for 3 at speed 2.
+- **Stun** is a lob with no damage at speed 3. Fire Bolt does no damage and sets the slot on fire.
 
 ### Health and damage
 
-- Heroes have 2–4 health by role (caster 2, ranged 3, melee 4). Abilities deal 0–2 damage.
+- Heroes have 2–4 health by role (caster 2, ranged 3, warrior 4). Abilities deal 0–3 damage.
 - There are no hit chances, critical hits or damage ranges. Every preview is exact.
 
 ### Effects
@@ -151,12 +170,13 @@ A side wins when the other has no heroes standing. If both sides fall to the sam
 
 ## Heroes
 
-- **Class** decides health, recovery (how often it acts), **which abilities the hero can learn** (its primaries and secondaries) and which items it can wear.
+- **Class** decides health, recovery (how often it acts), **role** and which items it can wear.
+- **Roles, as in Into the Breach's mech classes:** every class is a **warrior**, **ranged** or **caster**, and every ability belongs to one role and one slot (primary or secondary). **Any hero can equip any ability of its role**, from any faction. Each class has a few signature abilities, offered first; faction identity comes from starting kits and what your towns can teach.
 - Loadouts (abilities and items) can be changed outside battle.
 - **Levels:** heroes gain XP from battles and level up (cap from the table above). Each level gives an upgrade point (see below).
 - **Abilities:** moves a hero **learns** with Essence, at the Mage Tower (spells, for caster classes) or the Barracks (attacks, for martial classes). A learned ability belongs to the hero.
-- **Ability slots:** a hero equips **one primary and one secondary**, each chosen from its class's short list. Primaries are quick, dependable attacks; secondaries are heavier attacks, control, or protection.
-- **Ability upgrades:** as in Into the Breach, each ability lists 1–2 upgrades (+1 damage, faster, an extra effect, a bigger pattern) that cost upgrade points. In the prototype every hero has 2 points to spend before a battle.
+- **Ability slots:** a hero equips **one primary and one secondary** of its role. Primaries are dependable attacks; secondaries are heavier attacks, control, protection or movement.
+- **Ability levels 0, 1 and 2:** every ability has two level-ups (+1 damage, faster, an extra effect, a bigger pattern), applied in order, each costing 1 upgrade point. In the prototype every hero has 2 points: one ability to level 2, or both to level 1.
 - **Items:** equipment **bought** with gold from a town's Market, or found on the map. It goes in the hero's 5 equipment slots (see below), separate from the ability slots.
 - **Knock-out:** a hero who falls in battle isn't dead. You revive them at a town you own for gold scaled by level (starting at 100 × level; a Shrine makes it cheaper). They're available again from your next turn and keep their XP, points, abilities and items.
 - **Loot:** abilities can never be taken. The winner of a battle picks **one equipped item** from each enemy hero they knocked out. If nobody in the party can equip it, it goes to the player's stash. Fully equipping a hero is a risk: the more you give them, the more your opponent can take.
@@ -182,31 +202,29 @@ Like Into the Breach's reactor cores: each level gives **1 point** to spend on t
 
 - **+1 health**
 - **Faster recovery** on the timeline (−1 tick)
-- **An ability upgrade:** each ability has 1–2 upgrades listed on it, such as +1 damage, faster attack speed, or a bigger pattern. An upgrade costs 1–2 points.
+- **An ability level:** raise an equipped ability from level 0 to 1, or 1 to 2.
 
-Ability upgrades belong to the hero, as abilities do. In town you can take points back off an unequipped ability and reassign them.
+Ability levels belong to the hero, as abilities do. In town you can take points back off an unequipped ability and reassign them.
 
 ### Classes
 
-Three basic classes per faction: a melee front-liner, a ranged attacker and a caster. Each class has 2 primaries and 3 secondaries to choose from. Advanced classes come later, once these nine play well.
+Three basic classes per faction: a warrior, a ranged hero and a caster.
 
-| Class        | Faction | HP  | Recovery |
-| ------------ | ------- | --- | -------- |
-| Knight       | Light   | 4   | 5        |
-| Crossbowman  | Light   | 3   | 4        |
-| Stormcaller  | Light   | 2   | 4        |
-| Death Knight | Dark    | 4   | 5        |
-| Assassin     | Dark    | 4   | 3        |
-| Warlock      | Dark    | 2   | 4        |
-| Warden       | Nature  | 4   | 5        |
-| Ranger       | Nature  | 3   | 3        |
-| Druid        | Nature  | 2   | 4        |
+| Class        | Faction | Role    | HP  | Recovery |
+| ------------ | ------- | ------- | --- | -------- |
+| Knight       | Light   | Warrior | 4   | 5        |
+| Crossbowman  | Light   | Ranged  | 3   | 4        |
+| Stormcaller  | Light   | Caster  | 2   | 4        |
+| Death Knight | Dark    | Warrior | 4   | 5        |
+| Assassin     | Dark    | Ranged  | 3   | 4        |
+| Warlock      | Dark    | Caster  | 2   | 4        |
+| Warden       | Nature  | Warrior | 4   | 5        |
+| Ranger       | Nature  | Ranged  | 3   | 4        |
+| Druid        | Nature  | Caster  | 2   | 4        |
 
-Health follows role: casters 2, ranged 3, melee 4. Recovery (ticks until a hero's next activation) is 5 for tanks, 3 for fast classes (Assassin, Ranger) and 4 for the rest.
+Health follows role (warrior 4, ranged 3, caster 2). Recovery is 5 for warriors and 4 for the rest. Balance (rebalanced 2026-09-27, bot simulations): the three factions win 46–51%.
 
-Damage starts low: most abilities do 1, a few heavy ones do 2, and utility abilities do 0 and only apply an effect. Other numbers are placeholders, to be tuned in playtesting.
-
-See [Factions](#factions) for the class and ability lists. The prototype in `packages/rules` implements this design: all nine classes, every effect, and the timeline.
+See [Abilities](#abilities) for every ability by role. The prototype in `packages/rules` implements this design: all nine classes, every effect, and the timeline.
 
 ## Towns
 
@@ -268,86 +286,96 @@ Each faction has one element and one utility effect:
 
 Balance between factions is a loose rock-paper-scissors, not hard counters.
 
-Generated from `packages/rules/src/content.ts`. Speed is ticks until the action lands; upgrade costs are in brackets.
+## Abilities
 
-### Light
+Generated from `packages/rules/src/content.ts`. Speed is ticks until the action lands. Any hero can equip any ability of its role; "Signature of" is the class that offers it first.
 
-| Class                       | Slot      | Ability         | Speed | What it does                                                           | Upgrades                                   |
-| --------------------------- | --------- | --------------- | ----- | ---------------------------------------------------------------------- | ------------------------------------------ |
-| Knight (4 HP, every 5)      | Primary   | Bash            | 1     | Melee, straight ahead · 1 damage                                       | +1 damage (2), Weakens (1)                 |
-|                             | Primary   | Cleave          | 2     | Melee, straight ahead and the slot to its right · 1 damage             | Faster (−1 tick) (2), Marks (1)            |
-|                             | Primary   | Shield Bash     | 1     | Melee, straight ahead · 1 damage · knocks it into the back row         | +1 damage (2)                              |
-|                             | Secondary | Bodyguard       | 1     | Self · steps in front of a neighbour about to be hit                   | Also shields itself (1)                    |
-|                             | Secondary | Shield Wall     | 1     | Self · leaves a barrier (the hero there takes 1 less damage)           | Faster (−1 tick) (1)                       |
-|                             | Secondary | Taunt           | 1     | Self · single attacks on its neighbours hit it instead                 | Also shields itself (1)                    |
-|                             | Secondary | Rally           | 1     | Any ally · its queued actions land 1 sooner                            | 2 ticks sooner (1)                         |
-|                             | Secondary | Intervene       | 0     | Any ally · you swap places with that ally                              | Also shields itself (1)                    |
-| Crossbowman (3 HP, every 4) | Primary   | Bolt            | 1     | Straight shot down its column · 1 damage                               | +1 damage (2), Marks (1)                   |
-|                             | Primary   | Aimed Shot      | 2     | Any enemy slot · 1 damage                                              | Faster (−1 tick) (2), +1 damage (2)        |
-|                             | Primary   | Scatter Shot    | 2     | Any enemy slot and the slot to its right · 1 damage                    | Faster (−1 tick) (2)                       |
-|                             | Secondary | Heavy Bolt      | 2     | Straight shot down its column · 2 damage                               | +1 damage (2), Interrupts (1)              |
-|                             | Secondary | Pinning Bolt    | 1     | Straight shot down its column · 1 damage · root (can't move next turn) | Chills instead (1)                         |
-|                             | Secondary | Suppress        | 1     | Straight shot down its column · weaken (its next hit does 1 less)      | +1 damage (1)                              |
-|                             | Secondary | Concussive Bolt | 1     | Straight shot down its column · 1 damage · knocks it into the back row | Interrupts instead (1)                     |
-| Stormcaller (2 HP, every 4) | Primary   | Spark           | 1     | Any enemy slot · 1 damage                                              | +1 damage (2), Chains (2)                  |
-|                             | Primary   | Chain Lightning | 2     | Any enemy slot · 1 damage · chains to touching heroes                  | +1 damage (2), Faster (−1 tick) (2)        |
-|                             | Secondary | Thunder         | 2     | Any enemy slot, whole column · 1 damage                                | +1 damage (2), Chills (1)                  |
-|                             | Secondary | Aegis           | 1     | An adjacent ally · shield (blocks the next hit)                        | Faster (−1 tick) (1), Leaves a barrier (1) |
-|                             | Secondary | Haste           | 1     | Any ally · next turn 2 sooner                                          | 3 ticks sooner (1)                         |
-|                             | Secondary | Inspire         | 1     | Any ally · its next hit does 1 more                                    | Faster (−1 tick) (1)                       |
-|                             | Secondary | Relocate        | 1     | Any ally · moves the ally to the other row of its lane                 | Faster (−1 tick) (1)                       |
+### Warriors
 
-### Dark
+Knight (light, 4 HP, every 5); Death Knight (dark, 4 HP, every 5); Warden (nature, 4 HP, every 5).
 
-| Class                        | Slot      | Ability     | Speed | What it does                                                                                       | Upgrades                            |
-| ---------------------------- | --------- | ----------- | ----- | -------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| Death Knight (4 HP, every 5) | Primary   | Reap        | 1     | Melee, straight ahead · 1 damage · burn (1 damage on its next 2 turns)                             | +1 damage (2)                       |
-|                              | Primary   | Rend        | 1     | Melee, diagonally ahead · 1 damage · mark (the next hit on it does 1 more)                         | +1 damage (2)                       |
-|                              | Primary   | Hook        | 1     | Melee into the back row ahead · drags it into the front row                                        | +1 damage (1)                       |
-|                              | Secondary | Dread       | 1     | Melee, straight ahead · delays its queued actions by 2                                             | Delays 3 ticks (1), +1 damage (1)   |
-|                              | Secondary | Drain       | 1     | Melee, straight ahead · 1 damage · heals itself 1                                                  | +1 damage (2)                       |
-|                              | Secondary | Grim Guard  | 1     | Self · steps in front of a neighbour about to be hit                                               | Also shields itself (1)             |
-|                              | Secondary | Sweep       | 1     | Melee, straight ahead and the slot to its right · knocks it into the back row                      | +1 damage (2)                       |
-| Assassin (4 HP, every 3)     | Primary   | Stab        | 1     | Melee, diagonally ahead · 2 damage                                                                 | Burns (1)                           |
-|                              | Primary   | Backstab    | 2     | Melee into the back row ahead · 1 damage                                                           | +1 damage (2), Faster (−1 tick) (2) |
-|                              | Primary   | Trip        | 1     | Melee, diagonally ahead · 1 damage · shoves it one lane sideways, away from you                    | +1 damage (2)                       |
-|                              | Secondary | Smoke Bomb  | 1     | Any enemy slot · leaves smoke (the hero there cannot attack)                                       | Two slots (2)                       |
-|                              | Secondary | Expose      | 1     | Any enemy slot · mark (the next hit on it does 1 more)                                             | Two slots (1)                       |
-|                              | Secondary | Kidney Shot | 1     | Melee, straight ahead · 1 damage · cancels its queued actions                                      | Stuns instead (2)                   |
-|                              | Secondary | Shadowstep  | 0     | Self · next turn 2 sooner                                                                          | 3 ticks sooner (1)                  |
-| Warlock (2 HP, every 4)      | Primary   | Fire Bolt   | 1     | Any enemy slot · 1 damage · burn (1 damage on its next 2 turns)                                    | +1 damage (2)                       |
-|                              | Primary   | Hex         | 1     | Any enemy slot · weaken (its next hit does 1 less)                                                 | Two slots (1)                       |
-|                              | Secondary | Hellfire    | 3     | Any enemy slot, 2×2 square · 1 damage · leaves fire (1 damage to whoever stands or steps there)    | Faster (−1 tick) (2)                |
-|                              | Secondary | Ignite      | 1     | Any enemy slot · leaves fire (1 damage to whoever stands or steps there)                           | Two slots (1)                       |
-|                              | Secondary | Disrupt     | 2     | Any enemy slot · delays its queued actions by 3                                                    | Faster (−1 tick) (2)                |
-|                              | Secondary | Dark Pact   | 1     | Any ally · its next hit does 1 more                                                                | Faster (−1 tick) (1)                |
-|                              | Secondary | Twist       | 2     | Any enemy slot and the slot to its right · the two heroes there swap places · works on either side | Faster (−1 tick) (2), +1 damage (2) |
+| Slot      | Ability     | Signature of | Speed | Level 0                                                                                                              | Level 1             | Level 2             |
+| --------- | ----------- | ------------ | ----- | -------------------------------------------------------------------------------------------------------------------- | ------------------- | ------------------- |
+| Primary   | Bash        | Knight       | 1     | Melee, straight ahead · 2 damage                                                                                     | +1 damage           | Weakens             |
+| Primary   | Cleave      | Knight       | 2     | Melee, straight ahead and the slot to its right · 1 damage                                                           | Faster (−1 tick)    | Marks               |
+| Primary   | Reap        | Death Knight | 1     | Melee, straight ahead · 1 damage · burn (1 damage on its next 2 turns)                                               | +1 damage           | Also shields itself |
+| Primary   | Rend        | Death Knight | 1     | Melee, diagonally ahead · 1 damage · mark (the next hit on it does 1 more)                                           | +1 damage           | Also shields itself |
+| Primary   | Stab        | Death Knight | 1     | Melee, diagonally ahead · 2 damage                                                                                   | Burns               | +1 damage           |
+| Primary   | Backstab    | Death Knight | 2     | Melee into the back row ahead · 2 damage                                                                             | +1 damage           | Faster (−1 tick)    |
+| Primary   | Slam        | Warden       | 1     | Melee, straight ahead · 1 damage · chill (next turn 2 later)                                                         | +1 damage           | Also shields itself |
+| Primary   | Maul        | Warden       | 2     | Melee, straight ahead · 3 damage                                                                                     | Interrupts          | +1 damage           |
+| Primary   | Shield Bash | Knight       | 1     | Melee, straight ahead · 1 damage · knocks it into the back row                                                       | +1 damage           | Also shields itself |
+| Primary   | Hook        | Death Knight | 1     | Melee into the back row ahead · drags it into the front row                                                          | +1 damage           | Also shields itself |
+| Primary   | Heave       | Warden       | 1     | Melee, straight ahead · 1 damage · knocks it into the back row                                                       | +1 damage           | Also shields itself |
+| Primary   | Trip        | Death Knight | 1     | Melee, diagonally ahead · 1 damage · shoves it one slot away from you (across rows in your lane, sideways otherwise) | +1 damage           | Also shields itself |
+| Secondary | Bodyguard   | Knight       | 1     | Self · steps in front of a neighbour about to be hit                                                                 | Also shields itself | Also shields itself |
+| Secondary | Shield Wall | Knight       | 1     | Self · leaves a barrier (the hero there takes 1 less damage)                                                         | Faster (−1 tick)    | Also shields itself |
+| Secondary | Taunt       | Knight       | 1     | Self · single attacks on its neighbours hit it instead                                                               | Also shields itself | Also shields itself |
+| Secondary | Dread       | Death Knight | 1     | Melee, straight ahead · 1 damage · delays its queued actions by 2                                                    | Delays 3 ticks      | +1 damage           |
+| Secondary | Drain       | Death Knight | 1     | Melee, straight ahead · 1 damage · heals itself 1                                                                    | +1 damage           | Also shields itself |
+| Secondary | Grim Guard  | Death Knight | 1     | Self · steps in front of a neighbour about to be hit                                                                 | Also shields itself | Also shields itself |
+| Secondary | Kidney Shot | Death Knight | 1     | Melee, straight ahead · 1 damage · cancels its queued actions                                                        | Stuns instead       | +1 damage           |
+| Secondary | Stone Wall  | Warden       | 1     | An empty front slot of your own · raises a stone block (2 health)                                                    | Faster (−1 tick)    | Also shields itself |
+| Secondary | Entangle    | Warden       | 1     | Melee, straight ahead · 1 damage · root (can't move next turn)                                                       | +1 damage           | Also shields itself |
+| Secondary | Stand Firm  | Warden       | 1     | Self · leaves a barrier (the hero there takes 1 less damage)                                                         | Also shields itself | Also shields itself |
+| Secondary | Rally       | Knight       | 1     | Any ally · its queued actions land 1 sooner                                                                          | 2 ticks sooner      | Also shields itself |
+| Secondary | Sweep       | Death Knight | 1     | Melee, straight ahead and the slot to its right · knocks it into the back row                                        | +1 damage           | Also shields itself |
+| Secondary | Uproot      | Warden       | 1     | Melee, diagonally ahead · 1 damage · shoves it one slot away from you (across rows in your lane, sideways otherwise) | +1 damage           | Also shields itself |
+| Secondary | Intervene   | Knight       | 0     | Any ally · you swap places with that ally                                                                            | Also shields itself | Also shields itself |
 
-### Nature
+### Ranged
 
-| Class                  | Slot      | Ability       | Speed | What it does                                                                       | Upgrades                        |
-| ---------------------- | --------- | ------------- | ----- | ---------------------------------------------------------------------------------- | ------------------------------- |
-| Warden (4 HP, every 5) | Primary   | Slam          | 1     | Melee, straight ahead · 1 damage · chill (next turn 2 later)                       | +1 damage (2)                   |
-|                        | Primary   | Maul          | 2     | Melee, straight ahead · 2 damage                                                   | Interrupts (1)                  |
-|                        | Primary   | Heave         | 1     | Melee, straight ahead · 1 damage · knocks it into the back row                     | +1 damage (2)                   |
-|                        | Secondary | Stone Wall    | 1     | An empty front slot of your own · raises a stone block (2 health)                  | Faster (−1 tick) (1)            |
-|                        | Secondary | Entangle      | 1     | Melee, straight ahead · root (can't move next turn)                                | +1 damage (1)                   |
-|                        | Secondary | Stand Firm    | 1     | Self · leaves a barrier (the hero there takes 1 less damage)                       | Also shields itself (1)         |
-|                        | Secondary | Uproot        | 1     | Melee, diagonally ahead · shoves it one lane sideways, away from you               | +1 damage (1)                   |
-| Ranger (3 HP, every 3) | Primary   | Arrow         | 1     | Any enemy slot · 1 damage                                                          | +1 damage (2)                   |
-|                        | Primary   | Quick Shot    | 1     | Straight shot down its column · 1 damage · its next turn 1 sooner                  | Next turn 2 sooner (1)          |
-|                        | Primary   | Twin Arrows   | 2     | Any enemy slot, whole column · 1 damage                                            | Faster (−1 tick) (2)            |
-|                        | Secondary | Frost Arrow   | 1     | Straight shot down its column · chill (next turn 2 later)                          | +1 damage (1), Leaves frost (1) |
-|                        | Secondary | Volley        | 2     | A whole enemy row · 1 damage                                                       | Faster (−1 tick) (2)            |
-|                        | Secondary | Hunter's Mark | 1     | Any enemy slot · mark (the next hit on it does 1 more)                             | Faster (−1 tick) (1)            |
-|                        | Secondary | Driving Shot  | 1     | Straight shot down its column · 1 damage · knocks it into the back row             | +1 damage (2)                   |
-| Druid (2 HP, every 4)  | Primary   | Thorns        | 1     | Any enemy slot · 1 damage                                                          | Roots (1), Leaves thorns (1)    |
-|                        | Primary   | Quake         | 2     | A whole enemy row · 1 damage                                                       | Chills (1)                      |
-|                        | Secondary | Petrify       | 3     | Any enemy slot · stun (skips its next turn, cancels its queued action)             | Faster (−1 tick) (2)            |
-|                        | Secondary | Stoneskin     | 1     | An adjacent ally · shield that chills whoever hits it                              | Faster (−1 tick) (1)            |
-|                        | Secondary | Wild Growth   | 1     | Any ally · next turn 2 sooner                                                      | 3 ticks sooner (1)              |
-|                        | Secondary | Mend          | 1     | Any ally · heals 2                                                                 | Heals 3 (1)                     |
-|                        | Secondary | Gust          | 1     | Any enemy slot · shoves it one lane sideways, away from you · works on either side | Whole column (2)                |
+Crossbowman (light, 3 HP, every 4); Assassin (dark, 3 HP, every 4); Ranger (nature, 3 HP, every 4).
+
+| Slot      | Ability         | Signature of | Speed | Level 0                                                                      | Level 1            | Level 2             |
+| --------- | --------------- | ------------ | ----- | ---------------------------------------------------------------------------- | ------------------ | ------------------- |
+| Primary   | Bolt            | Crossbowman  | 1     | Straight shot down its column · 2 damage                                     | +1 damage          | Marks               |
+| Primary   | Aimed Shot      | Crossbowman  | 1     | Any enemy slot · 1 damage                                                    | Faster (−1 tick)   | +1 damage           |
+| Primary   | Arrow           | Ranger       | 1     | Any enemy slot · 1 damage                                                    | +1 damage          | Also shields itself |
+| Primary   | Quick Shot      | Ranger       | 1     | Straight shot down its column · 1 damage · its next turn 1 sooner            | Next turn 2 sooner | +1 damage           |
+| Primary   | Scatter Shot    | Crossbowman  | 2     | Any enemy slot and the slot to its right · 1 damage                          | Marks what it hits | Also shields itself |
+| Primary   | Twin Arrows     | Ranger       | 2     | Any enemy slot, whole column · 1 damage                                      | Faster (−1 tick)   | +1 damage           |
+| Primary   | Throwing Knives | Assassin     | 1     | Straight shot down its column · 2 damage                                     | +1 damage          | Marks               |
+| Primary   | Poison Dart     | Assassin     | 1     | Any enemy slot · burn (1 damage on its next 2 turns)                         | +1 damage          | Also weakens        |
+| Secondary | Heavy Bolt      | Crossbowman  | 2     | Straight shot down its column · 3 damage                                     | +1 damage          | Interrupts          |
+| Secondary | Pinning Bolt    | Crossbowman  | 1     | Straight shot down its column · 1 damage · root (can't move next turn)       | Chills instead     | +1 damage           |
+| Secondary | Suppress        | Crossbowman  | 1     | Straight shot down its column · 1 damage · weaken (its next hit does 1 less) | +1 damage          | Also shields itself |
+| Secondary | Smoke Bomb      | Assassin     | 1     | Any enemy slot · leaves smoke (the hero there cannot attack)                 | Two slots          | Also shields itself |
+| Secondary | Expose          | Assassin     | 1     | Any enemy slot · mark (the next hit on it does 1 more)                       | Two slots          | Also shields itself |
+| Secondary | Frost Arrow     | Ranger       | 1     | Straight shot down its column · 1 damage · chill (next turn 2 later)         | +1 damage          | Leaves frost        |
+| Secondary | Volley          | Ranger       | 3     | A whole enemy row · 1 damage                                                 | Faster (−1 tick)   | +1 damage           |
+| Secondary | Hunter's Mark   | Ranger       | 1     | Any enemy slot · mark (the next hit on it does 1 more)                       | Faster (−1 tick)   | Also shields itself |
+| Secondary | Concussive Bolt | Crossbowman  | 1     | Straight shot down its column · 1 damage · knocks it into the back row       | Interrupts instead | +1 damage           |
+| Secondary | Shadowstep      | Assassin     | 0     | Self · next turn 2 sooner                                                    | 3 ticks sooner     | Also shields itself |
+| Secondary | Driving Shot    | Ranger       | 1     | Straight shot down its column · 1 damage · knocks it into the back row       | +1 damage          | Also shields itself |
+
+### Casters
+
+Stormcaller (light, 2 HP, every 4); Warlock (dark, 2 HP, every 4); Druid (nature, 2 HP, every 4).
+
+| Slot      | Ability         | Signature of | Speed | Level 0                                                                                                                 | Level 1          | Level 2             |
+| --------- | --------------- | ------------ | ----- | ----------------------------------------------------------------------------------------------------------------------- | ---------------- | ------------------- |
+| Primary   | Spark           | Stormcaller  | 1     | Any enemy slot · 1 damage                                                                                               | +1 damage        | Chains              |
+| Primary   | Chain Lightning | Stormcaller  | 2     | Any enemy slot · 1 damage · chains to touching heroes                                                                   | +1 damage        | Faster (−1 tick)    |
+| Primary   | Fire Bolt       | Warlock      | 1     | Any enemy slot · leaves fire (1 damage to whoever stands or steps there)                                                | +1 damage        | Also shields itself |
+| Primary   | Hex             | Warlock      | 2     | Any enemy slot · 1 damage · weaken (its next hit does 1 less)                                                           | Two slots        | +1 damage           |
+| Primary   | Thorns          | Druid        | 1     | Any enemy slot · 1 damage                                                                                               | Leaves thorns    | Roots               |
+| Primary   | Quake           | Druid        | 3     | A whole enemy row · 1 damage                                                                                            | Chills           | +1 damage           |
+| Secondary | Thunder         | Stormcaller  | 2     | Any enemy slot, whole column · 1 damage                                                                                 | +1 damage        | Chills              |
+| Secondary | Aegis           | Stormcaller  | 1     | An adjacent ally · shield (blocks the next hit)                                                                         | Faster (−1 tick) | Leaves a barrier    |
+| Secondary | Haste           | Stormcaller  | 1     | Any ally · next turn 2 sooner                                                                                           | 3 ticks sooner   | Also shields itself |
+| Secondary | Hellfire        | Warlock      | 3     | Any enemy slot, 2×2 square · 1 damage · leaves fire (1 damage to whoever stands or steps there)                         | Faster (−1 tick) | +1 damage           |
+| Secondary | Ignite          | Warlock      | 2     | Any enemy slot and the slot to its right · leaves fire (1 damage to whoever stands or steps there)                      | Faster (−1 tick) | Also shields itself |
+| Secondary | Disrupt         | Warlock      | 1     | Any enemy slot · delays its queued actions by 3                                                                         | Faster (−1 tick) | 4 ticks             |
+| Secondary | Petrify         | Druid        | 3     | Any enemy slot · stun (skips its next turn, cancels its queued action)                                                  | Faster (−1 tick) | Also shields itself |
+| Secondary | Stoneskin       | Druid        | 1     | An adjacent ally · shield that chills whoever hits it                                                                   | Faster (−1 tick) | Also shields itself |
+| Secondary | Wild Growth     | Druid        | 1     | Any ally · next turn 2 sooner                                                                                           | 3 ticks sooner   | Also shields itself |
+| Secondary | Inspire         | Stormcaller  | 1     | Any ally · its next hit does 1 more                                                                                     | Faster (−1 tick) | Also shields itself |
+| Secondary | Dark Pact       | Warlock      | 1     | Any ally · its next hit does 1 more                                                                                     | Faster (−1 tick) | Also shields itself |
+| Secondary | Mend            | Druid        | 1     | Any ally · heals 2                                                                                                      | Heals 3          | Also shields itself |
+| Secondary | Gust            | Druid        | 1     | Any enemy slot · shoves it one slot away from you (across rows in your lane, sideways otherwise) · works on either side | Whole column     | Also shields itself |
+| Secondary | Twist           | Warlock      | 2     | Any enemy slot and the slot to its right · the two heroes there swap places · works on either side                      | Faster (−1 tick) | +1 damage           |
+| Secondary | Relocate        | Stormcaller  | 1     | Any ally · moves the ally to the other row of its lane                                                                  | Faster (−1 tick) | Also shields itself |
 
 ## Online play
 

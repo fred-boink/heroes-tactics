@@ -4,6 +4,8 @@ import {
   abilities,
   abilityText,
   factionClasses,
+  heroClasses,
+  rolePool,
   unitAbility,
   upgradePoints,
   type Faction,
@@ -24,7 +26,8 @@ const factionBlurb: Record<Faction, string> = {
 interface Build {
   primary: string;
   secondary: string;
-  upgrades: Record<string, string[]>;
+  /** Ability levels (0–2) by ability id. */
+  levels: Record<string, number>;
 }
 
 type Builds = Record<string, Build>;
@@ -33,20 +36,13 @@ function defaultBuilds(faction: Faction): Builds {
   return Object.fromEntries(
     factionClasses(faction).map((c) => [
       c.id,
-      { primary: c.primaries[0]!, secondary: c.secondaries[0]!, upgrades: {} },
+      { primary: c.primaries[0]!, secondary: c.secondaries[0]!, levels: {} },
     ]),
   );
 }
 
 function spent(build: Build) {
-  let total = 0;
-  for (const [abilityId, ids] of Object.entries(build.upgrades)) {
-    for (const id of ids) {
-      total +=
-        abilities[abilityId]!.upgrades?.find((u) => u.id === id)?.cost ?? 0;
-    }
-  }
-  return total;
+  return Object.values(build.levels).reduce((a, b) => a + b, 0);
 }
 
 export function Setup({ onStart }: { onStart: (config: GameConfig) => void }) {
@@ -77,8 +73,8 @@ export function Setup({ onStart }: { onStart: (config: GameConfig) => void }) {
       loadouts: Object.fromEntries(
         Object.entries(b).map(([c, x]) => [c, [x.primary, x.secondary]]),
       ),
-      upgrades: Object.fromEntries(
-        Object.entries(b).map(([c, x]) => [c, x.upgrades]),
+      levels: Object.fromEntries(
+        Object.entries(b).map(([c, x]) => [c, x.levels]),
       ),
     });
     const [a, b] = [toConfig(builds[0]), toConfig(builds[1])];
@@ -86,7 +82,7 @@ export function Setup({ onStart }: { onStart: (config: GameConfig) => void }) {
       mode,
       factions: picks,
       loadouts: [a.loadouts, b.loadouts],
-      upgrades: [a.upgrades, b.upgrades],
+      levels: [a.levels, b.levels],
       seed: Math.floor(Math.random() * 1_000_000),
     });
   };
@@ -263,39 +259,38 @@ function HeroBuilder({
 }) {
   const left = upgradePoints - spent(build);
   const choose = (slot: 'primary' | 'secondary', id: string) => {
-    const upgrades = { ...build.upgrades };
-    delete upgrades[build[slot]];
-    onChange({ ...build, [slot]: id, upgrades });
+    const levels = { ...build.levels };
+    delete levels[build[slot]];
+    onChange({ ...build, [slot]: id, levels });
   };
-  const toggleUpgrade = (
-    abilityId: string,
-    upgradeId: string,
-    cost: number,
-  ) => {
-    const current = build.upgrades[abilityId] ?? [];
-    const on = current.includes(upgradeId);
-    if (!on && cost > left) return;
-    onChange({
-      ...build,
-      upgrades: {
-        ...build.upgrades,
-        [abilityId]: on
-          ? current.filter((u) => u !== upgradeId)
-          : [...current, upgradeId],
-      },
-    });
+  const setLevel = (abilityId: string, level: number) => {
+    const current = build.levels[abilityId] ?? 0;
+    if (level - current > left) return;
+    const levels = { ...build.levels, [abilityId]: level };
+    if (level === 0) delete levels[abilityId];
+    onChange({ ...build, levels });
   };
 
-  const slot = (
-    label: string,
-    kind: 'primary' | 'secondary',
-    options: string[],
-  ) => {
+  const slot = (label: string, kind: 'primary' | 'secondary') => {
     const chosen = build[kind];
-    const effective = unitAbility({ upgrades: build.upgrades }, chosen);
+    const signature = kind === 'primary' ? c.primaries : c.secondaries;
+    const others = rolePool(c.role, kind).filter(
+      (id) => !signature.includes(id),
+    );
+    const level = build.levels[chosen] ?? 0;
+    const effective = unitAbility({ levels: build.levels }, chosen);
+    const levelUps = abilities[chosen]!.upgrades ?? [];
+    const option = (id: string, signatureOption: boolean) => (
+      <option key={id} value={id}>
+        {abilities[id]!.name}
+        {signatureOption
+          ? ''
+          : ` (${factionNames[classOf(id)?.faction ?? c.faction]})`}
+      </option>
+    );
     return (
       <div className={clsx('flex', 'flex-col', 'gap-2')}>
-        <div className={clsx('flex', 'flex-wrap', 'items-center', 'gap-1.5')}>
+        <div className={clsx('flex', 'flex-wrap', 'items-center', 'gap-2')}>
           <span
             className={clsx(
               'w-20',
@@ -307,32 +302,63 @@ function HeroBuilder({
           >
             {label}
           </span>
-          {options.map((id) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={chosen === id}
-              onClick={() => choose(kind, id)}
-              className={clsx(
-                'rounded-full',
-                'border',
-                'px-3',
-                'py-1',
-                'text-sm',
-                'transition-colors',
-                chosen === id
-                  ? ['border-brass', 'bg-brass', 'text-ink']
-                  : ['border-brass/30', 'text-vellum/75', 'hover:border-brass'],
-              )}
-            >
-              {abilities[id]!.name}
-            </button>
-          ))}
+          <select
+            aria-label={`${c.name} ${label.toLowerCase()}`}
+            value={chosen}
+            onChange={(e) => choose(kind, e.target.value)}
+            className={clsx(
+              'rounded-full',
+              'border',
+              'border-brass/50',
+              'bg-umber',
+              'px-3',
+              'py-1',
+              'text-sm',
+              'text-vellum',
+            )}
+          >
+            <optgroup label={`${c.name} signature`}>
+              {signature.map((id) => option(id, true))}
+            </optgroup>
+            <optgroup label={`Any ${c.role}`}>
+              {others.map((id) => option(id, false))}
+            </optgroup>
+          </select>
+          <span
+            role="group"
+            aria-label={`${abilities[chosen]!.name} level`}
+            className={clsx(
+              'flex',
+              'overflow-hidden',
+              'rounded-full',
+              'border',
+              'border-storm/50',
+            )}
+          >
+            {[0, 1, 2].map((n) => (
+              <button
+                key={n}
+                type="button"
+                aria-pressed={level === n}
+                disabled={n - level > left}
+                onClick={() => setLevel(chosen, n)}
+                className={clsx(
+                  'px-2.5',
+                  'py-0.5',
+                  'text-xs',
+                  level === n
+                    ? ['bg-storm', 'font-bold', 'text-ink']
+                    : ['text-vellum/70', 'enabled:hover:bg-storm/20'],
+                  'disabled:opacity-30',
+                )}
+              >
+                Lv {n}
+              </button>
+            ))}
+          </span>
         </div>
-        <div
-          className={clsx('ml-0', 'flex', 'flex-col', 'gap-1.5', 'sm:ml-20')}
-        >
-          <p className={clsx('text-sm', 'text-vellum/80')}>
+        <div className={clsx('flex', 'flex-col', 'gap-1', 'sm:ml-20')}>
+          <p className={clsx('text-sm', 'text-vellum/85')}>
             <span className={clsx('text-vellum/50')}>
               {kindNames[effective.kind]} ·{' '}
               {effective.speed === 1 ? '1 tick' : `${effective.speed} ticks`}{' '}
@@ -340,54 +366,16 @@ function HeroBuilder({
             </span>
             {abilityText(effective)}
           </p>
-          <div className={clsx('flex', 'flex-wrap', 'gap-1.5')}>
-            {(abilities[chosen]!.upgrades ?? []).map((u) => {
-              const on = build.upgrades[chosen]?.includes(u.id) ?? false;
-              const affordable = on || u.cost <= left;
-              return (
-                <button
-                  key={u.id}
-                  type="button"
-                  aria-pressed={on}
-                  disabled={!affordable}
-                  onClick={() => toggleUpgrade(chosen, u.id, u.cost)}
-                  className={clsx(
-                    'flex',
-                    'items-center',
-                    'gap-1.5',
-                    'rounded-md',
-                    'border',
-                    'px-2',
-                    'py-0.5',
-                    'text-xs',
-                    'transition-colors',
-                    on
-                      ? ['border-storm', 'bg-storm/20', 'text-storm']
-                      : [
-                          'border-vellum/20',
-                          'text-vellum/70',
-                          'enabled:hover:border-storm',
-                        ],
-                    'disabled:opacity-35',
-                  )}
-                >
-                  <span aria-hidden className={clsx('flex', 'gap-0.5')}>
-                    {Array.from({ length: u.cost }, (_, i) => (
-                      <span
-                        key={i}
-                        className={clsx(
-                          'size-1.5',
-                          'rounded-full',
-                          on ? 'bg-storm' : 'bg-vellum/50',
-                        )}
-                      />
-                    ))}
-                  </span>
-                  {u.name}
-                </button>
-              );
-            })}
-          </div>
+          <ol className={clsx('flex', 'flex-wrap', 'gap-x-3', 'text-xs')}>
+            {levelUps.map((u, i) => (
+              <li
+                key={u.id + i}
+                className={clsx(level > i ? 'text-storm' : 'text-vellum/45')}
+              >
+                Lv {i + 1}: {u.name}
+              </li>
+            ))}
+          </ol>
         </div>
       </div>
     );
@@ -413,16 +401,37 @@ function HeroBuilder({
           'gap-2',
         )}
       >
-        <span className={clsx('font-display', 'text-lg')}>{c.name}</span>
+        <span className={clsx('flex', 'items-center', 'gap-2')}>
+          <span className={clsx('font-display', 'text-lg')}>{c.name}</span>
+          <span
+            className={clsx(
+              'rounded-full',
+              'bg-walnut-light',
+              'px-2',
+              'text-[0.65rem]',
+              'uppercase',
+              'tracking-wider',
+              'text-vellum/70',
+            )}
+          >
+            {c.role}
+          </span>
+        </span>
         <span className={clsx('text-xs', 'text-vellum/60')}>
           {c.maxHp} health · acts every {c.recovery} ticks ·{' '}
           <span className={clsx(left > 0 ? 'text-storm' : 'text-vellum/60')}>
-            {left} of {upgradePoints} upgrade points left
+            {left} of {upgradePoints} level points left
           </span>
         </span>
       </div>
-      {slot('Primary', 'primary', c.primaries)}
-      {slot('Secondary', 'secondary', c.secondaries)}
+      {slot('Primary', 'primary')}
+      {slot('Secondary', 'secondary')}
     </li>
+  );
+}
+
+function classOf(abilityId: string) {
+  return Object.values(heroClasses).find(
+    (c) => c.primaries.includes(abilityId) || c.secondaries.includes(abilityId),
   );
 }

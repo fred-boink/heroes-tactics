@@ -9,6 +9,7 @@ import {
   demoBattle,
   FRONT,
   heroClasses,
+  hitsNothing,
   queuePreview,
   targetSlots,
   timeline,
@@ -66,7 +67,7 @@ const hero = (
   row: Row,
   nextAt: number,
   loadout?: string[],
-  upgrades?: Record<string, string[]>,
+  levels?: Record<string, number>,
 ): UnitSetup => ({
   id,
   owner,
@@ -74,7 +75,7 @@ const hero = (
   pos: { col, row },
   nextAt,
   ...(loadout ? { loadout } : {}),
-  ...(upgrades ? { upgrades } : {}),
+  ...(levels ? { levels } : {}),
 });
 
 /** A hero far down the timeline, so the battle doesn't end early. */
@@ -178,7 +179,7 @@ describe('reach and line of fire', () => {
       targetSlots(s, c, unitAbility(c, 'bolt'), { dc: 0, row: FRONT }),
     ).toEqual([{ col: 1, row: FRONT }]);
     const { state } = play(s, act('c', 'bolt', 0, FRONT));
-    expect(lost(state, 'front')).toBe(1);
+    expect(lost(state, 'front')).toBe(abilities.bolt!.damage);
     expect(lost(state, 'back')).toBe(0);
   });
 });
@@ -187,19 +188,19 @@ describe('queued actions', () => {
   it('land on whoever is in the slot, or miss if it moved away', () => {
     const setup = () =>
       createBattle([
-        hero('c', 0, 'crossbowman', 1, BACK, 1, ['aimedShot', 'heavyBolt']),
+        hero('c', 0, 'crossbowman', 1, BACK, 1, ['bolt', 'heavyBolt']),
         hero('k', 1, 'knight', 1, FRONT, 2),
         bystander(1),
       ]);
     const hitState = play(
       setup(),
-      act('c', 'aimedShot', 0, FRONT),
+      act('c', 'heavyBolt', 0, FRONT),
       wait('k'),
     ).state;
-    expect(lost(hitState, 'k')).toBe(1);
+    expect(lost(hitState, 'k')).toBe(abilities.heavyBolt!.damage);
     const missed = play(
       setup(),
-      act('c', 'aimedShot', 0, FRONT),
+      act('c', 'heavyBolt', 0, FRONT),
       move('k', 2, FRONT),
       wait('k'),
     ).state;
@@ -208,21 +209,21 @@ describe('queued actions', () => {
 
   it('shift with the attacker when an ally swaps with it', () => {
     const s = createBattle([
-      hero('c', 0, 'crossbowman', 1, BACK, 1, ['aimedShot', 'heavyBolt']),
+      hero('c', 0, 'crossbowman', 1, BACK, 1, ['bolt', 'heavyBolt']),
       hero('ally', 0, 'knight', 2, BACK, 2),
       hero('e', 1, 'knight', 1, FRONT, 9),
       hero('f', 1, 'knight', 2, FRONT, 9),
     ]);
     const queued = play(
       s,
-      act('c', 'aimedShot', 0, FRONT),
+      act('c', 'heavyBolt', 0, FRONT),
       move('ally', 1, BACK),
     ).state;
     expect(actionSlots(queued, queued.queue[0]!).slots).toEqual([
       { col: 2, row: FRONT },
     ]);
     const { state } = play(queued, wait('ally'));
-    expect(lost(state, 'f')).toBe(1);
+    expect(lost(state, 'f')).toBe(abilities.heavyBolt!.damage);
     expect(lost(state, 'e')).toBe(0);
   });
 
@@ -264,13 +265,18 @@ describe('statuses', () => {
 
   it('burn deals 1 at the start of the next two activations', () => {
     const s = createBattle([
-      hero('w', 0, 'warlock', 1, BACK, 1, ['fireBolt', 'ignite']),
+      hero('dk', 0, 'deathKnight', 1, FRONT, 1, ['reap', 'dread']),
       hero('e', 1, 'knight', 1, FRONT, 3),
     ]);
-    const burnt = play(s, act('w', 'fireBolt', 0, FRONT)).state;
-    expect(lost(burnt, 'e')).toBe(2);
-    const later = play(burnt, wait('e'), wait('w'), wait('e')).state;
-    expect(lost(later, 'e')).toBe(3);
+    const hit = abilities.reap!.damage;
+    const burnt = play(s, act('dk', 'reap', 0, FRONT)).state;
+    expect(burnt.activeId).toBe('e');
+    expect(lost(burnt, 'e')).toBe(hit + 1);
+    const second = play(burnt, wait('e')).state;
+    const later = play(second, wait(second.activeId!)).state;
+    const last =
+      later.activeId === 'e' ? later : play(later, wait(later.activeId!)).state;
+    expect(lost(last, 'e')).toBe(hit + 2);
   });
 
   it('marked takes 1 more; weak deals 1 less', () => {
@@ -294,7 +300,7 @@ describe('statuses', () => {
       act('c', 'heavyBolt', 0, FRONT),
     ).state;
     const after = play(hexed, wait(hexed.activeId!)).state;
-    expect(lost(after, 'k')).toBe(1);
+    expect(lost(after, 'k')).toBe(abilities.heavyBolt!.damage - 1);
   });
 
   it('stun cancels queued actions and skips the next activation', () => {
@@ -316,7 +322,7 @@ describe('statuses', () => {
 
   it('interrupt cancels queued actions without skipping', () => {
     const s = createBattle([
-      hero('a', 0, 'assassin', 1, FRONT, 1.5, ['stab', 'kidneyShot']),
+      hero('a', 0, 'deathKnight', 1, FRONT, 1.5, ['stab', 'kidneyShot']),
       hero('e', 1, 'knight', 1, FRONT, 1, ['cleave', 'taunt']),
     ]);
     const { state, events } = play(
@@ -367,7 +373,7 @@ describe('protecting allies', () => {
     expect(walled.grounds.filter((g) => g.kind === 'barrier')).toHaveLength(4);
     const shot = play(walled, act('c', 'heavyBolt', 0, FRONT)).state;
     const after = play(shot, wait(shot.activeId!)).state;
-    expect(lost(after, 'w')).toBe(1);
+    expect(lost(after, 'w')).toBe(abilities.heavyBolt!.damage - 1);
   });
 
   it('a shield absorbs the hit; stoneskin also chills the attacker', () => {
@@ -414,20 +420,20 @@ describe('protecting allies', () => {
   });
 });
 
-describe('loadouts and upgrades', () => {
-  it('equips one primary and one secondary', () => {
+describe('loadouts and levels', () => {
+  it('equips one primary and one secondary of its role', () => {
     expect(() =>
       createBattle([hero('k', 0, 'knight', 1, FRONT, 1, ['bash', 'cleave'])]),
     ).toThrow();
     expect(() =>
-      createBattle([hero('k', 0, 'knight', 1, FRONT, 1, ['reap', 'taunt'])]),
+      createBattle([hero('k', 0, 'knight', 1, FRONT, 1, ['arrow', 'taunt'])]),
     ).toThrow();
   });
 
-  it('upgrades change the ability and cost upgrade points', () => {
+  it('levels change the ability and cost one point each', () => {
     const s = createBattle([
       hero('c', 0, 'crossbowman', 1, BACK, 1, ['bolt', 'heavyBolt'], {
-        bolt: ['power'],
+        bolt: 1,
       }),
       bystander(1),
     ]);
@@ -436,8 +442,8 @@ describe('loadouts and upgrades', () => {
     expect(() =>
       createBattle([
         hero('c', 0, 'crossbowman', 1, BACK, 1, ['bolt', 'heavyBolt'], {
-          bolt: ['power'],
-          heavyBolt: ['power'],
+          bolt: 2,
+          heavyBolt: 1,
         }),
       ]),
     ).toThrow();
@@ -476,7 +482,7 @@ describe('slot statuses', () => {
 
   it('smoke stops the hero standing in it from acting and fizzles its queue', () => {
     const s = createBattle([
-      hero('a', 0, 'assassin', 1, FRONT, 1.5, ['stab', 'smokeBomb']),
+      hero('a', 0, 'assassin', 1, FRONT, 1.5, ['throwingKnives', 'smokeBomb']),
       hero('c', 1, 'crossbowman', 0, BACK, 1, ['bolt', 'heavyBolt']),
       hero('k', 0, 'knight', 0, FRONT, 9),
     ]);
@@ -489,7 +495,7 @@ describe('slot statuses', () => {
   it('thorns hurt anyone stepping in; frost costs 2 moves', () => {
     const s = createBattle([
       hero('d', 0, 'druid', 1, BACK, 1, ['thorns', 'petrify'], {
-        thorns: ['patch'],
+        thorns: 1,
       }),
       hero('e', 1, 'knight', 1, FRONT, 3),
     ]);
@@ -500,7 +506,7 @@ describe('slot statuses', () => {
 
     const t = createBattle([
       hero('r', 0, 'ranger', 1, BACK, 1, ['arrow', 'frostArrow'], {
-        frostArrow: ['field'],
+        frostArrow: 2,
       }),
       hero('e', 1, 'knight', 1, FRONT, 5),
     ]);
@@ -510,7 +516,7 @@ describe('slot statuses', () => {
 
   it('moves one slot; stepping onto an ally swaps with it', () => {
     const s = createBattle([
-      hero('a', 0, 'assassin', 0, FRONT, 1, ['stab', 'smokeBomb']),
+      hero('a', 0, 'assassin', 0, FRONT, 1, ['throwingKnives', 'smokeBomb']),
       hero('k', 0, 'knight', 1, FRONT, 9),
       bystander(1),
     ]);
@@ -523,7 +529,7 @@ describe('slot statuses', () => {
 
   it('frost pins the hero standing in it; stone blocks cannot be entered', () => {
     const s = createBattle([
-      hero('a', 0, 'assassin', 0, FRONT, 1, ['stab', 'smokeBomb']),
+      hero('a', 0, 'assassin', 0, FRONT, 1, ['throwingKnives', 'smokeBomb']),
       hero('k', 0, 'knight', 1, FRONT, 9),
       bystander(1),
     ]);
@@ -561,7 +567,7 @@ describe('slot statuses', () => {
 
   it('smoke on a slot stops the hero there from attacking', () => {
     const s = createBattle([
-      hero('a', 0, 'assassin', 1, FRONT, 1, ['stab', 'smokeBomb']),
+      hero('a', 0, 'assassin', 1, FRONT, 1, ['throwingKnives', 'smokeBomb']),
       hero('c', 1, 'crossbowman', 1, BACK, 3, ['bolt', 'heavyBolt']),
     ]);
     const smoked = play(s, act('a', 'smokeBomb', 0, BACK)).state;
@@ -645,7 +651,7 @@ describe('pushes, pulls and support', () => {
       act('s', 'inspire', 1, BACK),
       act('c', 'bolt', 0, FRONT),
     );
-    expect(lost(state, 'e')).toBe(2);
+    expect(lost(state, 'e')).toBe(abilities.bolt!.damage + 1);
 
     const t = createBattle([
       hero('k', 0, 'knight', 0, FRONT, 2, ['bash', 'rally']),
@@ -672,7 +678,7 @@ describe('pushes, pulls and support', () => {
 describe('sideways moves and swaps', () => {
   it('trip shoves the target a lane away from the attacker', () => {
     const s = createBattle([
-      hero('a', 0, 'assassin', 1, FRONT, 1, ['trip', 'expose']),
+      hero('a', 0, 'deathKnight', 1, FRONT, 1, ['trip', 'dread']),
       hero('e', 1, 'knight', 2, FRONT, 9),
       hero('f', 1, 'knight', 3, FRONT, 9),
     ]);
@@ -756,5 +762,46 @@ describe('moving your own heroes', () => {
     ]);
     const own = aimOptions(s, unit(s, 'k'), 'shieldBash').filter((a) => a.own);
     expect(own).toHaveLength(0);
+  });
+});
+
+describe('turn order', () => {
+  it('a hero never gets its turn before its own queued action lands', () => {
+    const s = createBattle([
+      hero('c', 0, 'crossbowman', 1, FRONT, 1, ['bolt', 'heavyBolt']),
+      hero('d', 1, 'deathKnight', 1, FRONT, 1.5, ['reap', 'dread'], {
+        dread: 1,
+      }),
+      bystander(1),
+    ]);
+    // Heavy Bolt lands at 3; the Crossbowman's next turn would come at 5.
+    const queued = play(s, act('c', 'heavyBolt', 0, FRONT)).state;
+    // Dread (level 1: 3 ticks) pushes the Heavy Bolt to 6, past that turn, so
+    // the turn waits until the bolt has landed.
+    const { events } = play(queued, act('d', 'dread', 0, FRONT));
+    expect(events).toContainEqual({ type: 'delayed', unitId: 'c', ticks: 3 });
+    const landed = events.findIndex(
+      (e) => e.type === 'landed' && e.abilityId === 'heavyBolt',
+    );
+    const turn = events.findIndex(
+      (e) => e.type === 'activated' && e.unitId === 'c',
+    );
+    expect(landed).toBeGreaterThanOrEqual(0);
+    expect(landed).toBeLessThan(turn);
+  });
+});
+
+describe('empty aims', () => {
+  it('knows an attack at an empty slot would hit no one yet', () => {
+    const s = createBattle([
+      hero('k', 0, 'knight', 1, FRONT, 1, ['bash', 'bodyguard']),
+      hero('d', 1, 'deathKnight', 0, FRONT, 5),
+    ]);
+    expect(hitsNothing(s, 'k', 'bash', { dc: 0, row: FRONT })).toBe(true);
+    const lined = createBattle([
+      hero('k', 0, 'knight', 0, FRONT, 1, ['bash', 'bodyguard']),
+      hero('d', 1, 'deathKnight', 0, FRONT, 5),
+    ]);
+    expect(hitsNothing(lined, 'k', 'bash', { dc: 0, row: FRONT })).toBe(false);
   });
 });

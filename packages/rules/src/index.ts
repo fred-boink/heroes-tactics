@@ -5,7 +5,7 @@ import type { BattleState } from './types';
 export * from './types';
 export * from './engine';
 export * from './skirmish';
-export { abilities, heroClasses } from './content';
+export { abilities, heroClasses, rolePool } from './content';
 
 /** Prototype skirmish: a Light party against a Dark party. */
 export function demoBattle(): BattleState {

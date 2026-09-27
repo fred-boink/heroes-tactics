@@ -54,7 +54,7 @@ export type AbilityKind = 'melee' | 'ranged' | 'spell' | 'support';
  * - interrupt: the target's queued actions are cancelled.
  * - push: a front-row target is knocked into the back row (swapping with whoever is there).
  * - pull: a back-row target is dragged to the front row (swapping likewise).
- * - shove: the target is knocked one lane sideways, away from the user's lane (swapping likewise).
+ * - shove: the target is knocked one slot away from the user: to the other row if it's in the user's lane, otherwise one lane sideways (swapping likewise).
  * - twist: the two heroes in the hit slots trade places.
  * - intervene: the user trades places with the target ally.
  * - relocate: the target ally is moved to the other row of its lane (swapping likewise).
@@ -127,17 +127,27 @@ export type AbilityStats = Pick<
   | 'shieldSelf'
 >;
 
-/** An Into the Breach-style upgrade, bought with upgrade points. */
+/**
+ * One level of an ability. Abilities have levels 0, 1 and 2; each level applies
+ * its changes on top of the previous ones and costs one upgrade point.
+ */
 export interface Upgrade {
   id: string;
   name: string;
   cost: number;
   changes: Partial<AbilityStats>;
+  /** Added to the ability's damage and speed, so rebalancing keeps upgrades meaningful. */
+  bonus?: { damage?: number; speed?: number };
 }
+
+/** Which heroes can equip an ability, as in Into the Breach's mech classes. */
+export type Role = 'warrior' | 'ranged' | 'caster';
 
 export interface AbilityDef {
   id: string;
   name: string;
+  role: Role;
+  slot: 'primary' | 'secondary';
   kind: AbilityKind;
   reach: Reach;
   pattern: Pattern;
@@ -157,6 +167,7 @@ export interface AbilityDef {
   shieldSelf?: boolean;
   /** Can be aimed at your own side as well as the enemy's. */
   eitherSide?: boolean;
+  /** Level 1 and level 2, in order. */
   upgrades?: Upgrade[];
 }
 
@@ -164,12 +175,15 @@ export interface HeroClass {
   id: string;
   name: string;
   faction: Faction;
+  role: Role;
   maxHp: number;
   /** Ticks from acting until the hero's next activation. */
   recovery: number;
-  /** A hero equips one primary... */
+  /**
+   * Signature abilities, offered first. Any hero can equip any primary and
+   * secondary of its role.
+   */
   primaries: string[];
-  /** ...and one secondary. */
   secondaries: string[];
 }
 
@@ -185,8 +199,8 @@ export interface Unit {
   classId: string;
   /** [primary, secondary]. */
   loadout: string[];
-  /** Bought upgrades, by ability id. */
-  upgrades: Record<string, string[]>;
+  /** Ability levels (0–2) by ability id; missing means level 0. */
+  levels: Record<string, number>;
   hp: number;
   /** Null once knocked out. */
   pos: Slot | null;

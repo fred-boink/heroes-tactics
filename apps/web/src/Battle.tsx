@@ -17,6 +17,7 @@ import {
   createBattle,
   factionParty,
   heroClass,
+  hitsNothing,
   inSmoke,
   moveOptions,
   previewAction,
@@ -106,11 +107,11 @@ export function Battle({
     createBattle([
       ...factionParty(config.factions[0], 0, {
         loadouts: config.loadouts[0],
-        upgrades: config.upgrades[0],
+        levels: config.levels[0],
       }),
       ...factionParty(config.factions[1], 1, {
         loadouts: config.loadouts[1],
-        upgrades: config.upgrades[1],
+        levels: config.levels[1],
       }),
     ]),
   );
@@ -729,6 +730,10 @@ function TurnPanel({
     </li>
   );
   const chosenAbility = abilityId ? unitAbility(unit, abilityId) : null;
+  const empty =
+    chosen && abilityId
+      ? hitsNothing(state, unit.id, abilityId, chosen.aim)
+      : false;
 
   return (
     <section className={clsx(panel, sideTone)} aria-label="Your turn">
@@ -895,6 +900,25 @@ function TurnPanel({
               {chosenAbility.speed === 1 ? '' : 's'}, on whoever is in the slot
               then.
             </span>
+            {empty && (
+              <span
+                role="status"
+                className={clsx(
+                  'basis-full',
+                  'rounded-md',
+                  'border',
+                  'border-oxblood-light/60',
+                  'bg-oxblood/30',
+                  'px-2',
+                  'py-1',
+                  'text-sm',
+                  'text-vellum',
+                )}
+              >
+                No one is there right now. This only hits if someone moves in
+                before it lands.
+              </span>
+            )}
             <button
               type="button"
               onClick={onConfirm}
@@ -1039,9 +1063,8 @@ function HeroCard({
       <div className={clsx('flex', 'flex-col', 'gap-2')}>
         {unit.loadout.map((id, index) => {
           const a = unitAbility(unit, id);
-          const bought = (abilities[id]!.upgrades ?? []).filter((u) =>
-            unit.upgrades[id]?.includes(u.id),
-          );
+          const level = unit.levels[id] ?? 0;
+          const bought = (abilities[id]!.upgrades ?? []).slice(0, level);
           return (
             <div
               key={id}
@@ -1075,7 +1098,7 @@ function HeroCard({
               </span>
               {bought.length > 0 && (
                 <span className={clsx('text-xs', 'text-storm')}>
-                  Upgraded: {bought.map((u) => u.name).join(', ')}
+                  Level {level}: {bought.map((u) => u.name).join(', ')}
                 </span>
               )}
             </div>

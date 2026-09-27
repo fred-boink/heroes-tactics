@@ -22,6 +22,15 @@ const maxActivations = 150;
 const factions: Faction[] = ['light', 'dark', 'nature'];
 const random = seededRandom(seed);
 
+/** Games and win share for each ability while equipped, and for each class. */
+const equipped: Record<string, { games: number; score: number }> = {};
+const classScore: Record<string, { games: number; score: number }> = {};
+const tally = (table: typeof equipped, key: string, score: number) => {
+  const t = (table[key] ??= { games: 0, score: 0 });
+  t.games++;
+  t.score += score;
+};
+
 const stats = {
   games: 0,
   wins: { light: 0, dark: 0, nature: 0 } as Record<Faction, number>,
@@ -111,6 +120,11 @@ function playGame(a: Faction, b: Faction) {
   ]);
   const firstMover = activeUnit(state)!.owner;
   const factionOf = [a, b];
+  const lineup = state.units.map((u) => ({
+    owner: u.owner,
+    classId: u.classId,
+    loadout: [...u.loadout],
+  }));
   while (state.winner === null && state.activations <= maxActivations) {
     const before = state;
     for (const command of chooseActivation(state, { random, noise: 0.4 })) {
@@ -127,6 +141,16 @@ function playGame(a: Faction, b: Faction) {
       if (!r.ok) break;
       state = r.state;
     }
+  }
+  for (const u of lineup) {
+    const score =
+      state.winner === null || state.winner === 'draw'
+        ? 0.5
+        : state.winner === u.owner
+          ? 1
+          : 0;
+    tally(classScore, u.classId, score);
+    for (const id of u.loadout) tally(equipped, id, score);
   }
   stats.games++;
   stats.played[a]++;
@@ -188,5 +212,24 @@ for (const c of Object.values(heroClasses)) {
       [...c.primaries, ...c.secondaries]
         .map((id) => `${abilities[id]!.name} ${stats.use[id] ?? 0}`)
         .join(', '),
+  );
+}
+
+const rate = (t: { games: number; score: number }) =>
+  t.score / Math.max(1, t.games);
+log('\nClass win rate');
+for (const [id, t] of Object.entries(classScore).sort(
+  (x, y) => rate(y[1]) - rate(x[1]),
+)) {
+  log(
+    `  ${heroClasses[id]!.name.padEnd(13)} ${pct(t.score, t.games).padStart(4)}  (${t.games})`,
+  );
+}
+log('\nWin rate with the ability equipped (random loadouts)');
+for (const [id, t] of Object.entries(equipped).sort(
+  (x, y) => rate(y[1]) - rate(x[1]),
+)) {
+  log(
+    `  ${abilities[id]!.name.padEnd(16)} ${pct(t.score, t.games).padStart(4)}  (${t.games}) used ${stats.use[id] ?? 0}`,
   );
 }
