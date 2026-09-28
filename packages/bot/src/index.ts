@@ -7,8 +7,10 @@ import {
   FRONT,
   inSmoke,
   moveOptions,
+  previewAction,
   type BattleState,
   type Command,
+  type OpeningChoice,
   type PlayerId,
   type Unit,
 } from '@tactics/rules';
@@ -54,7 +56,12 @@ export function chooseActivation(
   const noise = options.noise ?? 0.3;
   const blundering = random() < (options.blunder ?? 0);
   const style = blundering ? 'random' : (options.style ?? 'greedy');
-  const aware = random() < (options.awareness ?? 1);
+  // A bot that doesn't read the queue plans as if the enemy had queued
+  // nothing. It must be hidden before planning: simulating a plan runs the
+  // timeline, which would land the enemy's actions.
+  if (random() >= (options.awareness ?? 1)) {
+    state = { ...state, queue: state.queue.filter((q) => q.owner === me) };
+  }
   const plans: Command[][] = [];
   const scored: { score: number; plan: Command[]; after: BattleState }[] = [];
 
@@ -73,10 +80,7 @@ export function chooseActivation(
       if (!r.ok) return;
       s = r.state;
     }
-    const seen = aware
-      ? s
-      : { ...s, queue: s.queue.filter((q) => q.owner === me) };
-    const score = evaluate(forecast(seen), me) + random() * noise;
+    const score = evaluate(forecast(s), me) + random() * noise;
     if (style === 'lookahead')
       scored.push({ score, plan: [...prefix, ...plan], after: s });
     if (score > best.score) best = { score, plan: [...prefix, ...plan] };
@@ -154,6 +158,45 @@ export function chooseActivation(
 }
 
 /**
+ * A side's secret opening: each hero picks the ability and aim that scores best
+ * against the enemy as it stands, since nothing has moved yet. Blunders pick at
+ * random, like in battle.
+ */
+export function chooseOpening(
+  state: BattleState,
+  owner: PlayerId,
+  options: BotOptions = {},
+): OpeningChoice[] {
+  const random = options.random ?? Math.random;
+  const noise = options.noise ?? 0.3;
+  return state.units
+    .filter((u) => u.owner === owner && u.pos)
+    .map((unit): OpeningChoice => {
+      const all: OpeningChoice[] = [{ unitId: unit.id, brace: true }];
+      for (const abilityId of unit.loadout) {
+        for (const aim of aimOptions(state, unit, abilityId)) {
+          all.push({ unitId: unit.id, abilityId, aim });
+        }
+      }
+      if (random() < (options.blunder ?? 0)) {
+        return all[Math.floor(random() * all.length)]!;
+      }
+      let best = all[0]!;
+      let bestScore = evaluate(state, owner) + random() * noise;
+      for (const c of all) {
+        if ('brace' in c) continue;
+        const after = previewAction(state, unit.id, c.abilityId, c.aim).state;
+        const score = evaluate(after, owner) + random() * noise;
+        if (score > bestScore) {
+          bestScore = score;
+          best = c;
+        }
+      }
+      return best;
+    });
+}
+
+/**
  * Plays greedy moves for everyone until the first enemy hero after this one
  * has acted: the reply this plan has to survive.
  */
@@ -187,7 +230,11 @@ function forecast(state: BattleState): BattleState {
     if (!s.queue.some((q) => pending.has(q.seq))) break;
     const active = activeUnit(s);
     if (!active) break;
-    const r = applyCommand(s, { type: 'wait', unitId: active.id });
+    const r = applyCommand(s, {
+      type: 'wait',
+      unitId: active.id,
+      brace: false,
+    });
     if (!r.ok) break;
     s = r.state;
   }

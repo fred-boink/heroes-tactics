@@ -289,6 +289,11 @@ export interface BattleState {
   activations: number;
   nextSeq: number;
   winner: PlayerId | 'draw' | null;
+  /**
+   * During a secret opening, each side's choices (null until sent). Both are
+   * revealed and queued together, then the timeline starts.
+   */
+  opening: [OpeningChoice[] | null, OpeningChoice[] | null] | null;
 }
 
 export interface Aim {
@@ -298,10 +303,18 @@ export interface Aim {
   own?: boolean;
 }
 
+/** One hero's secret opening choice: an ability and aim, or brace. */
+export type OpeningChoice =
+  | { unitId: string; abilityId: string; aim: Aim }
+  | { unitId: string; brace: true };
+
 export type Command =
   | { type: 'move'; unitId: string; to: Slot }
   | { type: 'act'; unitId: string; abilityId: string; aim: Aim }
-  | { type: 'wait'; unitId: string };
+  /** Brace (the default), or just pass, as the bot does when it forecasts. */
+  | { type: 'wait'; unitId: string; brace?: boolean }
+  /** A side's secret opening: one choice for each of its heroes. */
+  | { type: 'opening'; owner: PlayerId; choices: OpeningChoice[] };
 
 export type Status =
   | 'shield'
@@ -328,6 +341,8 @@ export type BattleEvent =
   | { type: 'dodged'; seq: number; unitId: string }
   /** A hero in front of the target in its lane took a direct shot for it. */
   | { type: 'bodyBlocked'; unitId: string; protectedId: string }
+  | { type: 'openingChosen'; owner: PlayerId }
+  | { type: 'openingRevealed' }
   | { type: 'fizzled'; seq: number }
   | { type: 'damaged'; unitId: string; amount: number; hp: number }
   | { type: 'blockDamaged'; owner: PlayerId; col: number; hp: number }

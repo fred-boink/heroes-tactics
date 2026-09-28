@@ -14,6 +14,7 @@ import {
   type CommandResult,
   type Ground,
   type GroundKind,
+  type OpeningChoice,
   type PlayerId,
   type QueuedAction,
   type Row,
@@ -48,6 +49,29 @@ function baseAbility(id: string): AbilityDef {
 }
 
 /** An ability as a particular hero has it, at its level. */
+/**
+ * Rule switches for experiments. Not part of a battle's state: tools set them
+ * before playing, and the game uses the defaults.
+ */
+export const tuning = {
+  /** Extra ticks before the next turn of a hero that stepped or swapped. */
+  moveTax: 0,
+  /** Damaging attacks land no sooner than their damage in ticks. */
+  heavySlow: false,
+  /** How many ticks after player 1 player 2's heroes start. */
+  secondStart: 1,
+  /**
+   * How queued attacks treat heroes that move before they land.
+   * - lock: they hit only the heroes that were in their slots when queued.
+   * - answers: melee and direct shots follow their target and hit the first
+   *   hero in its lane (melee only the front row); lobs and spells hit whoever
+   *   stands in their slots.
+   */
+  threats: 'lock' as 'lock' | 'answers',
+  /** New battles start with both sides choosing their first actions in secret. */
+  secretOpening: false,
+};
+
 export function unitAbility(
   unit: Pick<Unit, 'levels'>,
   abilityId: string,
@@ -61,13 +85,19 @@ export function unitAbility(
     if (u.bonus?.speed)
       result.speed = Math.max(0, result.speed + u.bonus.speed);
   }
+  if (tuning.heavySlow && result.kind !== 'support' && result.damage > 1) {
+    result = { ...result, speed: Math.max(result.speed, result.damage) };
+  }
   return result;
 }
 
 /** A new battle, advanced to the first hero's activation. Fast heroes go first. */
 export function createBattle(
   units: UnitSetup[],
-  { levelPoints = upgradePoints }: { levelPoints?: number } = {},
+  {
+    levelPoints = upgradePoints,
+    opening = tuning.secretOpening,
+  }: { levelPoints?: number; opening?: boolean } = {},
 ): BattleState {
   const seen = new Set<string>();
   for (const u of units) {
@@ -90,7 +120,9 @@ export function createBattle(
         // Player 1 moves first; player 2's heroes start a tick later, so the
         // first side gets an opening before the other can react.
         nextAt:
-          u.nextAt ?? heroClass(u.classId).recovery + (u.owner === 1 ? 1 : 0),
+          u.nextAt ??
+          heroClass(u.classId).recovery +
+            (u.owner === 1 ? tuning.secondStart : 0),
         moves: 0,
         shielded: false,
         stoneskin: false,
@@ -114,8 +146,9 @@ export function createBattle(
     activations: 0,
     nextSeq: 1,
     winner: null,
+    opening: opening ? [null, null] : null,
   };
-  advance(state, []);
+  if (!opening) advance(state, []);
   return state;
 }
 
@@ -573,6 +606,8 @@ function run(
   command: Command,
   events: BattleEvent[],
 ): string | null {
+  if (command.type === 'opening') return submitOpening(state, command, events);
+  if (state.opening) return 'Both sides are still choosing their openings';
   const unit = activeUnit(state);
   if (!unit?.pos || unit.id !== command.unitId) {
     return "It is not this hero's turn";
@@ -604,7 +639,7 @@ function run(
 
   if (command.type === 'wait') {
     events.push({ type: 'waited', unitId: unit.id });
-    unit.braced = true;
+    unit.braced = command.brace !== false;
     endActivation(state, unit, Math.ceil(recovery / 2), events);
     return null;
   }
@@ -653,13 +688,106 @@ function queueAction(
   return null;
 }
 
+/**
+ * Where a melee attack or direct shot lands when it follows its targets: the
+ * first hero in each target's current lane. Melee only reaches the front row,
+ * so a target that retreated behind an empty front slot escapes it.
+ */
+function trackedSlots(
+  state: BattleState,
+  side: PlayerId,
+  a: AbilityDef,
+  action: QueuedAction,
+  events: BattleEvent[],
+): Slot[] {
+  const out: Slot[] = [];
+  for (const id of action.targets) {
+    const u = state.units.find((x) => x.id === id);
+    if (!u?.pos || u.owner !== side) continue;
+    const front = { col: u.pos.col, row: FRONT };
+    const covered = unitAt(state, side, front) ?? blockAt(state, side, front);
+    let slot: Slot | null = null;
+    if (covered) slot = front;
+    else if (a.kind !== 'melee') slot = u.pos;
+    if (!slot) {
+      events.push({ type: 'dodged', seq: action.seq, unitId: id });
+      continue;
+    }
+    const blocker = unitAt(state, side, slot);
+    if (blocker && blocker.id !== id && !action.targets.includes(blocker.id)) {
+      events.push({ type: 'bodyBlocked', unitId: blocker.id, protectedId: id });
+    }
+    if (!out.some((s) => sameSlot(s, slot))) out.push(slot);
+  }
+  return out;
+}
+
+/** Records a side's secret opening, and reveals both once both are in. */
+function submitOpening(
+  state: BattleState,
+  command: Extract<Command, { type: 'opening' }>,
+  events: BattleEvent[],
+): string | null {
+  if (!state.opening) return 'The opening is over';
+  const { owner, choices } = command;
+  if (state.opening[owner]) return 'This side has already chosen';
+  const heroes = state.units.filter((u) => u.owner === owner && u.pos);
+  if (
+    choices.length !== heroes.length ||
+    heroes.some((h) => !choices.some((c) => c.unitId === h.id))
+  ) {
+    return 'Choose one opening for each hero';
+  }
+  for (const c of choices) {
+    if ('brace' in c) continue;
+    const unit = heroes.find((h) => h.id === c.unitId)!;
+    if (!unit.loadout.includes(c.abilityId)) return 'Unknown ability';
+    const ok = aimOptions(state, unit, c.abilityId).some(
+      (o) =>
+        o.dc === c.aim.dc &&
+        o.row === c.aim.row &&
+        Boolean(o.own) === Boolean(c.aim.own),
+    );
+    if (!ok) return 'That target is out of reach';
+  }
+  state.opening[owner] = choices;
+  events.push({ type: 'openingChosen', owner });
+  const [first, second] = state.opening;
+  if (!first || !second) return null;
+
+  // Reveal: queue both sides' choices, alternating sides, from the same start.
+  state.opening = null;
+  events.push({ type: 'openingRevealed' });
+  const order: OpeningChoice[] = [];
+  for (let i = 0; i < Math.max(first.length, second.length); i++) {
+    if (first[i]) order.push(first[i]!);
+    if (second[i]) order.push(second[i]!);
+  }
+  for (const c of order) {
+    const unit = state.units.find((u) => u.id === c.unitId)!;
+    const recovery = heroClass(unit.classId).recovery;
+    if ('brace' in c) {
+      unit.braced = true;
+      unit.nextAt = state.time + Math.ceil(recovery / 2);
+      events.push({ type: 'waited', unitId: unit.id });
+      continue;
+    }
+    const error = queueAction(state, unit, { type: 'act', ...c }, events);
+    if (error) return error;
+    unit.nextAt = state.time + recovery;
+  }
+  advance(state, events);
+  return null;
+}
+
 function endActivation(
   state: BattleState,
   unit: Unit,
   delayTicks: number,
   events: BattleEvent[],
 ) {
-  unit.nextAt = state.time + delayTicks;
+  const moved = unit.moves < MOVE_POINTS;
+  unit.nextAt = state.time + delayTicks + (moved ? tuning.moveTax : 0);
   unit.moves = 0;
   unit.rooted = false;
   state.activeId = null;
@@ -758,7 +886,17 @@ function land(state: BattleState, action: QueuedAction, events: BattleEvent[]) {
     return;
   }
   const side = targetSide(user, a, action);
-  const cells = targetSlots(state, user, a, action);
+  let cells = targetSlots(state, user, a, action);
+  const answers = tuning.threats === 'answers' && action.targets?.length > 0;
+  if (answers && (a.kind === 'melee' || a.path === 'direct')) {
+    cells = trackedSlots(state, side, a, action, events);
+  } else if (answers) {
+    for (const id of action.targets) {
+      const u = state.units.find((x) => x.id === id);
+      if (u?.pos && u.owner === side && !cells.some((c) => sameSlot(c, u.pos!)))
+        events.push({ type: 'dodged', seq: action.seq, unitId: id });
+    }
+  }
   if (cells.length === 0) {
     events.push({ type: 'missed', seq: action.seq });
     return;
@@ -795,7 +933,10 @@ function land(state: BattleState, action: QueuedAction, events: BattleEvent[]) {
     return;
   }
 
-  const locked = action.targets?.length ? new Set(action.targets) : null;
+  const locked =
+    tuning.threats === 'lock' && action.targets?.length
+      ? new Set(action.targets)
+      : null;
   if (locked) {
     for (const id of locked) {
       const u = state.units.find((x) => x.id === id);

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   abilities,
   actionSlots,
@@ -13,6 +13,7 @@ import {
   queuePreview,
   targetSlots,
   timeline,
+  tuning,
   unitAbility,
   type BattleState,
   type Command,
@@ -914,5 +915,93 @@ describe('shot paths', () => {
       }).slots;
     expect(at('c', 'bolt', 0, FRONT)).toEqual([{ col: 0, row: FRONT }]);
     expect(at('r', 'arrow', -1, BACK)).toEqual([{ col: 0, row: BACK }]);
+  });
+});
+
+describe('threat answers (prototype A)', () => {
+  afterEach(() => {
+    tuning.threats = 'lock';
+  });
+
+  it('melee follows its target along the front row', () => {
+    tuning.threats = 'answers';
+    const s = createBattle([
+      hero('k', 0, 'knight', 1, FRONT, 1, ['maul', 'bodyguard']),
+      hero('e', 1, 'knight', 1, FRONT, 2),
+      bystander(1),
+    ]);
+    const { state } = play(
+      s,
+      act('k', 'maul', 0, FRONT),
+      move('e', 2, FRONT),
+      act('e', 'bodyguard', 0, FRONT),
+    );
+    expect(lost(state, 'e')).toBe(abilities.maul!.damage);
+  });
+
+  it('melee misses a target that retreats behind an empty front slot', () => {
+    tuning.threats = 'answers';
+    const s = createBattle([
+      hero('k', 0, 'knight', 1, FRONT, 1, ['maul', 'bodyguard']),
+      hero('e', 1, 'knight', 1, FRONT, 2),
+      bystander(1),
+    ]);
+    const { state, events } = play(
+      s,
+      act('k', 'maul', 0, FRONT),
+      move('e', 1, BACK),
+      act('e', 'bodyguard', 0, BACK),
+    );
+    expect(lost(state, 'e')).toBe(0);
+    expect(events.some((e) => e.type === 'dodged')).toBe(true);
+  });
+
+  it('a lob hits whoever stands in the slot when it lands', () => {
+    tuning.threats = 'answers';
+    const s = createBattle([
+      hero('s', 0, 'stormcaller', 1, BACK, 1, ['spark', 'thunder']),
+      hero('a', 1, 'knight', 1, FRONT, 2),
+      hero('b', 1, 'knight', 2, FRONT, 2),
+      bystander(1),
+    ]);
+    const { state } = play(
+      s,
+      act('s', 'thunder', 0, FRONT),
+      move('a', 0, FRONT),
+      wait('a'),
+      move('b', 1, FRONT),
+      act('b', 'bodyguard', 0, FRONT),
+    );
+    expect(lost(state, 'a')).toBe(0);
+    expect(lost(state, 'b')).toBe(abilities.thunder!.damage);
+  });
+});
+
+describe('secret opening (prototype B)', () => {
+  it('queues both sides together once both have chosen', () => {
+    const s = createBattle(
+      [
+        hero('c', 0, 'crossbowman', 1, BACK, 1, ['bolt', 'heavyBolt']),
+        hero('e', 1, 'knight', 1, FRONT, 2),
+      ],
+      { opening: true },
+    );
+    expect(s.opening).toEqual([null, null]);
+    expect(applyCommand(s, wait('c')).ok).toBe(false);
+    const first = applyCommand(s, {
+      type: 'opening',
+      owner: 0,
+      choices: [{ unitId: 'c', abilityId: 'bolt', aim: { dc: 0, row: FRONT } }],
+    });
+    if (!first.ok) throw new Error(first.error);
+    expect(first.state.queue).toHaveLength(0);
+    const both = applyCommand(first.state, {
+      type: 'opening',
+      owner: 1,
+      choices: [{ unitId: 'e', brace: true }],
+    });
+    if (!both.ok) throw new Error(both.error);
+    expect(both.state.opening).toBeNull();
+    expect(lost(both.state, 'e')).toBe(abilities.bolt!.damage - 1);
   });
 });
